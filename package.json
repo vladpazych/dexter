@@ -2,9 +2,11 @@
   "name": "dexter-workspace",
   "private": true,
   "workspaces": [
-    "packages/*",
-    "meta"
+    "packages/*"
   ],
+  "devDependencies": {
+    "@vladpazych/dexter": "workspace:*"
+  },
   "scripts": {
     "bump": "bun meta/index.ts release"
   }
