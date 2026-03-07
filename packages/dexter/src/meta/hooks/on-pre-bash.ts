@@ -1,7 +1,9 @@
 import { readJsonStdin, getCommand, type HookInput } from "../lib/stdin.ts"
 
-/** Patterns to deny with hints */
-const DENY_PATTERNS = [
+export type DenyPattern = { pattern: RegExp; hint: string }
+
+/** Core deny patterns — always active */
+export const CORE_DENY_PATTERNS: DenyPattern[] = [
   { pattern: /^git\s+(add)(\s|$)/, hint: "Use: /commit skill" },
   { pattern: /^git\s+commit(?!\s+--no-verify)(\s|$)/, hint: "Use: /commit skill" },
   { pattern: /^git\s+push\s+.*--force/, hint: "Force push not allowed. Use revert instead." },
@@ -38,31 +40,39 @@ async function isInConflictResolution(): Promise<boolean> {
   }
 }
 
-export async function onPreBash(): Promise<void> {
-  const input = await readJsonStdin<HookInput>()
+/** Check command against deny patterns. Returns deny reason or null (allow). */
+export async function checkPreBash(
+  input: HookInput | null,
+  patterns: DenyPattern[],
+): Promise<string | null> {
   const command = getCommand(input)
+  if (!command) return null
 
-  if (!command) {
-    process.exit(0)
+  for (const { pattern, hint } of patterns) {
+    if (pattern.test(command)) {
+      if (await isInConflictResolution()) return null
+      return `Raw git command blocked: ${command}. ${hint}`
+    }
   }
 
-  for (const { pattern, hint } of DENY_PATTERNS) {
-    if (pattern.test(command)) {
-      if (await isInConflictResolution()) {
-        process.exit(0)
-      }
+  return null
+}
 
-      console.log(
-        JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: "PreToolUse",
-            permissionDecision: "deny",
-            permissionDecisionReason: `Raw git command blocked: ${command}. ${hint}`,
-          },
-        }),
-      )
-      process.exit(0)
-    }
+/** Standalone handler — reads stdin, checks core patterns, exits. */
+export async function onPreBash(): Promise<void> {
+  const input = await readJsonStdin<HookInput>()
+  const reason = await checkPreBash(input, CORE_DENY_PATTERNS)
+
+  if (reason) {
+    console.log(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: reason,
+        },
+      }),
+    )
   }
 
   process.exit(0)

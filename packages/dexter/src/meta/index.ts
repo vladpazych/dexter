@@ -7,7 +7,10 @@
 
 // Factory
 export { createCLI } from "./cli.ts"
-export type { CLIConfig, HookContext, HookOutput } from "./cli.ts"
+export type { CLIConfig, HookContext, HookOutput, DenyPattern } from "./cli.ts"
+
+// Adapters (for custom commands that need low-level port access)
+export { createControlPorts } from "./adapters/index.ts"
 
 // Error handling
 export { ControlError, isControlError } from "./errors.ts"

@@ -24,10 +24,12 @@ import {
 import { createControlPorts } from "./adapters/index.ts"
 import { createControlService, type ControlService } from "./domain/service.ts"
 
-import { onPreBash } from "./hooks/on-pre-bash.ts"
-import { onPostWrite } from "./hooks/on-post-write.ts"
-import { onPostRead } from "./hooks/on-post-read.ts"
-import { onSessionStart } from "./hooks/on-session-start.ts"
+// Composable hook internals
+import { checkPreBash, CORE_DENY_PATTERNS, type DenyPattern } from "./hooks/on-pre-bash.ts"
+import { collectPostWriteContext } from "./hooks/on-post-write.ts"
+import { collectPostReadContext } from "./hooks/on-post-read.ts"
+
+// Stub hooks (fire-and-forget / no-op)
 import {
   onPostBash,
   onStop,
@@ -40,8 +42,9 @@ import {
   onSessionEnd,
   onPermissionRequest,
 } from "./hooks/stubs.ts"
+import { onSessionStart } from "./hooks/on-session-start.ts"
 
-import type { HookInput } from "./lib/stdin.ts"
+import { readJsonStdin, type HookInput } from "./lib/stdin.ts"
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -59,20 +62,23 @@ export type HookOutput = {
 export type CLIConfig = {
   commands?: Record<string, (args: string[], ctx: HookContext) => Promise<void> | void>
   hooks?: {
-    "pre-bash"?: { deny?: Array<{ pattern: RegExp; hint: string }> }
-    "post-read"?: (input: HookInput, ctx: HookContext) => HookOutput | Promise<HookOutput>
-    "post-write"?: (input: HookInput, ctx: HookContext) => HookOutput | Promise<HookOutput>
+    /** Additional deny patterns merged with core patterns */
+    "pre-bash"?: { deny?: DenyPattern[] }
+    /** Called after core post-read. Return additional context to append. */
+    "post-read"?: (input: HookInput | null) => HookOutput | Promise<HookOutput>
+    /** Called after core post-write. Return additional context to append. */
+    "post-write"?: (input: HookInput | null) => HookOutput | Promise<HookOutput>
   }
 }
 
+// Re-export for consumers defining deny patterns
+export type { DenyPattern }
+
 // ---------------------------------------------------------------------------
-// Core hook dispatch
+// Stub hooks (no extension point — just delegate)
 // ---------------------------------------------------------------------------
 
-const CORE_HOOKS: Record<string, () => Promise<void>> = {
-  "on-pre-bash": onPreBash,
-  "on-post-write": onPostWrite,
-  "on-post-read": onPostRead,
+const STUB_HOOKS: Record<string, () => Promise<void>> = {
   "on-session-start": onSessionStart,
   "on-post-bash": onPostBash,
   "on-stop": onStop,
@@ -90,12 +96,8 @@ const CORE_HOOKS: Record<string, () => Promise<void>> = {
 // Output helpers
 // ---------------------------------------------------------------------------
 
-function output(text: string, mode: OutputMode): void {
-  if (mode === "cli") {
-    console.log(text)
-  } else {
-    console.log(text)
-  }
+function output(text: string, _mode: OutputMode): void {
+  console.log(text)
 }
 
 function outputError(err: unknown, mode: OutputMode): void {
@@ -117,15 +119,91 @@ export function createCLI(config: CLIConfig = {}) {
     async run(): Promise<void> {
       const [, , cmd, ...rawArgs] = process.argv
 
-      // Hook commands — delegate to core handler
+      // Hook commands — composable dispatch
       if (cmd?.startsWith("on-")) {
-        const handler = CORE_HOOKS[cmd]
-        if (handler) {
-          await handler()
-          return
+        switch (cmd) {
+          case "on-pre-bash": {
+            const input = await readJsonStdin<HookInput>()
+            const patterns = [...CORE_DENY_PATTERNS, ...(config.hooks?.["pre-bash"]?.deny ?? [])]
+            const reason = await checkPreBash(input, patterns)
+
+            if (reason) {
+              console.log(
+                JSON.stringify({
+                  hookSpecificOutput: {
+                    hookEventName: "PreToolUse",
+                    permissionDecision: "deny",
+                    permissionDecisionReason: reason,
+                  },
+                }),
+              )
+            }
+            process.exit(0)
+          }
+
+          case "on-post-write": {
+            const input = await readJsonStdin<HookInput>()
+            const sections = await collectPostWriteContext(input)
+
+            // Run extension if provided
+            const ext = config.hooks?.["post-write"]
+            if (ext) {
+              const result = await ext(input)
+              if (result?.additionalContext) {
+                sections.push(result.additionalContext)
+              }
+            }
+
+            if (sections.length > 0) {
+              console.log(
+                JSON.stringify({
+                  hookSpecificOutput: {
+                    hookEventName: "PostToolUse",
+                    additionalContext: sections.join("\n"),
+                  },
+                }),
+              )
+            }
+            process.exit(0)
+          }
+
+          case "on-post-read": {
+            const input = await readJsonStdin<HookInput>()
+            const sections = await collectPostReadContext(input)
+
+            // Run extension if provided
+            const ext = config.hooks?.["post-read"]
+            if (ext) {
+              const result = await ext(input)
+              if (result?.additionalContext) {
+                sections.push(result.additionalContext)
+              }
+            }
+
+            if (sections.length > 0) {
+              console.log(
+                JSON.stringify({
+                  hookSpecificOutput: {
+                    hookEventName: "PostToolUse",
+                    additionalContext: sections.join("\n") + "\n",
+                  },
+                }),
+              )
+            }
+            process.exit(0)
+          }
+
+          default: {
+            // Stub hooks — no extension mechanism
+            const handler = STUB_HOOKS[cmd]
+            if (handler) {
+              await handler()
+              return
+            }
+            // Unknown hook — silent exit
+            process.exit(0)
+          }
         }
-        // Unknown hook — silent exit
-        process.exit(0)
       }
 
       // Everything below needs repo root + service

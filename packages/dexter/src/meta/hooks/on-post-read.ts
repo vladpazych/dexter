@@ -9,17 +9,16 @@ function xml(name: string, content: string): string {
   return render(block(name, text(content)), "xml")
 }
 
-export async function onPostRead(): Promise<void> {
-  const input = await readJsonStdin<HookInput>()
+/** Collect core post-read context sections. Returns array of XML strings. */
+export async function collectPostReadContext(input: HookInput | null): Promise<string[]> {
   const filePath = getFilePath(input)
-
-  if (!filePath) return
+  if (!filePath) return []
 
   let root: string
   try {
     root = findRepoRoot()
   } catch {
-    return
+    return []
   }
 
   const sections: string[] = []
@@ -47,6 +46,14 @@ export async function onPostRead(): Promise<void> {
   } else if (name === "OOUX.md") {
     sections.push(xml("before-writing", "load /ooux skill before modifying OOUX spec"))
   }
+
+  return sections
+}
+
+/** Standalone handler — reads stdin, collects context, outputs, exits. */
+export async function onPostRead(): Promise<void> {
+  const input = await readJsonStdin<HookInput>()
+  const sections = await collectPostReadContext(input)
 
   if (sections.length > 0) {
     console.log(

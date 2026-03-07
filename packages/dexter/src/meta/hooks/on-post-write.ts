@@ -8,19 +8,19 @@ function xml(name: string, content: string): string {
   return render(block(name, text(content)), "xml")
 }
 
-export async function onPostWrite(): Promise<void> {
-  const input = await readJsonStdin<HookInput>()
+/** Collect core post-write context sections. Returns array of XML strings. */
+export async function collectPostWriteContext(input: HookInput | null): Promise<string[]> {
   const filePath = getFilePath(input)
-  if (!filePath) return
+  if (!filePath) return []
 
   let root: string
   try {
     root = findRepoRoot()
   } catch {
-    return
+    return []
   }
 
-  if (!isInsideRepo(filePath, root)) return
+  if (!isInsideRepo(filePath, root)) return []
 
   const sections: string[] = []
 
@@ -49,6 +49,14 @@ export async function onPostWrite(): Promise<void> {
   }
 
   sections.push(xml("commit", `commit in meaningful chunks · ./meta/run commit "<reason>" <files>`))
+
+  return sections
+}
+
+/** Standalone handler — reads stdin, collects context, outputs, exits. */
+export async function onPostWrite(): Promise<void> {
+  const input = await readJsonStdin<HookInput>()
+  const sections = await collectPostWriteContext(input)
 
   if (sections.length > 0) {
     console.log(
