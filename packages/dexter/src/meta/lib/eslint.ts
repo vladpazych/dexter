@@ -17,6 +17,18 @@ function findPackageRoot(filePath: string): string | undefined {
   return undefined
 }
 
+/** Check if an ESLint config exists anywhere in the ancestor chain */
+function hasESLintConfig(filePath: string): boolean {
+  let dir = dirname(filePath)
+  while (dir !== dirname(dir)) {
+    for (const name of ["eslint.config.js", "eslint.config.mjs", "eslint.config.ts"]) {
+      if (existsSync(join(dir, name))) return true
+    }
+    dir = dirname(dir)
+  }
+  return false
+}
+
 /** Auto-fix a file, return remaining violations as text (empty string = clean) */
 export function runESLint(filePath: string): string {
   const cwd = findPackageRoot(filePath)
@@ -54,5 +66,5 @@ export function shouldLint(filePath: string): boolean {
     }
   }
 
-  return true
+  return hasESLintConfig(filePath)
 }
