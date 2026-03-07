@@ -1,6 +1,16 @@
-/**
- * Terminal helpers — color, cursor, ANSI utilities.
- */
-
-// TODO: Extract from asombro/platform/lib/dexter/src/terminal/
-export {}
+export {
+  blue,
+  bold,
+  c,
+  cyan,
+  dim,
+  gray,
+  green,
+  magenta,
+  red,
+  reset,
+  setColorEnabled,
+  stripAnsi,
+  wrap,
+  yellow,
+} from "./colors.ts"

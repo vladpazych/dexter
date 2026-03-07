@@ -10,4 +10,7 @@
  *   dexter/claude   — .claude folder management
  */
 
-export { version } from "./version.js"
+export { version } from "./version.ts"
+
+// Re-export top-level env utilities for convenience
+export { applyEnv, loadEnv } from "./env/index.ts"
