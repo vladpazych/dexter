@@ -4,5 +4,8 @@
   "workspaces": [
     "packages/*",
     "meta"
-  ]
+  ],
+  "scripts": {
+    "bump": "bun meta/index.ts release"
+  }
 }

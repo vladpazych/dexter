@@ -1,7 +1,18 @@
 {
   "name": "@vladpazych/dexter",
-  "version": "0.1.0",
+  "version": "0.1.13",
+  "description": "Agentic development toolkit — output rendering, env config, CLI framework for Claude Code hooks",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vladpazych/dexter.git",
+    "directory": "packages/dexter"
+  },
   "type": "module",
+  "files": [
+    "src",
+    "bin"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./meta": "./src/meta/index.ts",

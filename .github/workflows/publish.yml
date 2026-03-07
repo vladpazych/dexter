@@ -1,0 +1,41 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require version tag
+        run: |
+          tag=$(git tag --points-at HEAD | grep '^v' || true)
+          if [ -z "$tag" ]; then
+            echo "::error::HEAD has no v* tag. Run: bun bump patch|minor|major"
+            exit 1
+          fi
+          echo "Publishing $tag"
+
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun test packages/dexter/
+
+      # OIDC trusted publishing requires npm >=11.5.1 → node 24
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        working-directory: packages/dexter
