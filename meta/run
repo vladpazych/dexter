@@ -1,0 +1,20 @@
+#!/bin/sh
+# Meta CLI wrapper. Runs TypeScript source via Bun.
+#
+# Emergency brake: touch .claude/hooks-disabled to bypass all hook handlers.
+# Remove the file after fixing: rm .claude/hooks-disabled
+
+DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
+ROOT="${CLAUDE_PROJECT_DIR:-${DIR%/meta}}"
+
+# Ensure bun is on PATH — hooks run under /bin/sh which doesn't source shell profiles
+export PATH="$HOME/.bun/bin:$PATH"
+
+# Hook commands (on-*): check emergency brake
+case "$1" in
+  on-*)
+    [ -f "$ROOT/.claude/hooks-disabled" ] && exit 0
+    ;;
+esac
+
+exec bun run "$ROOT/meta/index.ts" "$@"

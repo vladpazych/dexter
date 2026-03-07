@@ -1,0 +1,8 @@
+{
+  "name": "dexter-workspace",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "meta"
+  ]
+}

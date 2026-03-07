@@ -1,0 +1,6 @@
+#!/bin/sh
+# Dexter CLI entry point.
+# Delegates to the TypeScript source via Bun — no build step.
+
+DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
+exec bun run "$DIR/../src/cli.ts" "$@"

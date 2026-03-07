@@ -1,0 +1,32 @@
+{
+  "name": "@vladpazych/dexter",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./meta": "./src/meta/index.ts",
+    "./output": "./src/output/index.ts",
+    "./env": "./src/env/index.ts",
+    "./pipe": "./src/pipe/index.ts",
+    "./terminal": "./src/terminal/index.ts",
+    "./claude": "./src/claude/index.ts",
+    "./config/eslint": "./src/config/eslint.js",
+    "./config/tsconfig/base.json": "./src/config/tsconfig/base.json",
+    "./config/tsconfig/node.json": "./src/config/tsconfig/node.json",
+    "./config/tsconfig/react.json": "./src/config/tsconfig/react.json"
+  },
+  "bin": {
+    "dexter": "./bin/dexter"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1"
+  }
+}
