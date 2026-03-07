@@ -6,7 +6,7 @@
  */
 
 import { render } from "../output/index.ts"
-import type { OutputMode } from "../output/types.ts"
+import type { Node, OutputMode } from "../output/types.ts"
 
 import { isControlError } from "./errors.ts"
 import { findRepoRoot } from "./lib/paths.ts"
@@ -28,21 +28,7 @@ import { createControlService, type ControlService } from "./domain/service.ts"
 import { checkPreBash, CORE_DENY_PATTERNS, type DenyPattern } from "./hooks/on-pre-bash.ts"
 import { collectPostWriteContext } from "./hooks/on-post-write.ts"
 import { collectPostReadContext } from "./hooks/on-post-read.ts"
-
-// Stub hooks (fire-and-forget / no-op)
-import {
-  onPostBash,
-  onStop,
-  onPromptSubmit,
-  onNotification,
-  onPreCompact,
-  onToolFailure,
-  onSubagentStart,
-  onSubagentStop,
-  onSessionEnd,
-  onPermissionRequest,
-} from "./hooks/stubs.ts"
-import { onSessionStart } from "./hooks/on-session-start.ts"
+import { collectSessionStartContext } from "./hooks/on-session-start.ts"
 
 import { readJsonStdin, type HookInput } from "./lib/stdin.ts"
 
@@ -53,11 +39,16 @@ import { readJsonStdin, type HookInput } from "./lib/stdin.ts"
 export type HookContext = {
   root: string
   service: ControlService
+  mode: OutputMode
+  /** Render a Node tree to string in the active output mode. */
+  render: (node: Node) => string
 }
 
 export type HookOutput = {
   additionalContext?: string
 } | void
+
+export type HookHandler = (input: HookInput | null) => HookOutput | Promise<HookOutput>
 
 export type CLIConfig = {
   commands?: Record<string, (args: string[], ctx: HookContext) => Promise<void> | void>
@@ -65,9 +56,31 @@ export type CLIConfig = {
     /** Additional deny patterns merged with core patterns */
     "pre-bash"?: { deny?: DenyPattern[] }
     /** Called after core post-read. Return additional context to append. */
-    "post-read"?: (input: HookInput | null) => HookOutput | Promise<HookOutput>
+    "post-read"?: HookHandler
     /** Called after core post-write. Return additional context to append. */
-    "post-write"?: (input: HookInput | null) => HookOutput | Promise<HookOutput>
+    "post-write"?: HookHandler
+    /** Called after core session-start. Return additional context to append. */
+    "session-start"?: HookHandler
+    /** Called after Bash tool execution. */
+    "post-bash"?: HookHandler
+    /** Called when agent is about to stop. */
+    "stop"?: HookHandler
+    /** Called on user prompt submit. */
+    "prompt-submit"?: HookHandler
+    /** Called on notification. */
+    "notification"?: HookHandler
+    /** Called before context compaction. */
+    "pre-compact"?: HookHandler
+    /** Called on tool failure. */
+    "tool-failure"?: HookHandler
+    /** Called when a subagent starts. */
+    "subagent-start"?: HookHandler
+    /** Called when a subagent stops. */
+    "subagent-stop"?: HookHandler
+    /** Called when session ends. */
+    "session-end"?: HookHandler
+    /** Called on permission request. */
+    "permission-request"?: HookHandler
   }
 }
 
@@ -75,34 +88,29 @@ export type CLIConfig = {
 export type { DenyPattern }
 
 // ---------------------------------------------------------------------------
-// Stub hooks (no extension point — just delegate)
+// Extension hooks — no core logic, delegate to consumer callback
 // ---------------------------------------------------------------------------
 
-const STUB_HOOKS: Record<string, () => Promise<void>> = {
-  "on-session-start": onSessionStart,
-  "on-post-bash": onPostBash,
-  "on-stop": onStop,
-  "on-prompt-submit": onPromptSubmit,
-  "on-notification": onNotification,
-  "on-pre-compact": onPreCompact,
-  "on-tool-failure": onToolFailure,
-  "on-subagent-start": onSubagentStart,
-  "on-subagent-stop": onSubagentStop,
-  "on-session-end": onSessionEnd,
-  "on-permission-request": onPermissionRequest,
+const EXTENSION_HOOKS: Record<string, { key: string; event: string }> = {
+  "on-post-bash": { key: "post-bash", event: "PostToolUse" },
+  "on-stop": { key: "stop", event: "Stop" },
+  "on-prompt-submit": { key: "prompt-submit", event: "PromptSubmit" },
+  "on-notification": { key: "notification", event: "Notification" },
+  "on-pre-compact": { key: "pre-compact", event: "PreCompact" },
+  "on-tool-failure": { key: "tool-failure", event: "ToolError" },
+  "on-subagent-start": { key: "subagent-start", event: "SubagentStart" },
+  "on-subagent-stop": { key: "subagent-stop", event: "SubagentStop" },
+  "on-session-end": { key: "session-end", event: "SessionEnd" },
+  "on-permission-request": { key: "permission-request", event: "PermissionRequest" },
 }
 
 // ---------------------------------------------------------------------------
 // Output helpers
 // ---------------------------------------------------------------------------
 
-function output(text: string, _mode: OutputMode): void {
-  console.log(text)
-}
-
 function outputError(err: unknown, mode: OutputMode): void {
   if (isControlError(err)) {
-    output(render(presentError(err), mode), mode)
+    console.log(render(presentError(err), mode))
   } else {
     const message = err instanceof Error ? err.message : String(err)
     console.error(message)
@@ -121,7 +129,42 @@ export function createCLI(config: CLIConfig = {}) {
 
       // Hook commands — composable dispatch
       if (cmd?.startsWith("on-")) {
+        // Emergency brake — bypass all hooks when .claude/hooks-disabled exists
+        try {
+          const root = findRepoRoot()
+          if (await Bun.file(`${root}/.claude/hooks-disabled`).exists()) {
+            process.exit(0)
+          }
+        } catch {
+          // No repo root — continue normally
+        }
+
         switch (cmd) {
+          case "on-session-start": {
+            const input = await readJsonStdin<HookInput>()
+            const sections = await collectSessionStartContext()
+
+            const ext = config.hooks?.["session-start"]
+            if (ext) {
+              const result = await ext(input)
+              if (result?.additionalContext) {
+                sections.push(result.additionalContext)
+              }
+            }
+
+            if (sections.length > 0) {
+              console.log(
+                JSON.stringify({
+                  hookSpecificOutput: {
+                    hookEventName: "SessionStart",
+                    additionalContext: sections.join("\n"),
+                  },
+                }),
+              )
+            }
+            process.exit(0)
+          }
+
           case "on-pre-bash": {
             const input = await readJsonStdin<HookInput>()
             const patterns = [...CORE_DENY_PATTERNS, ...(config.hooks?.["pre-bash"]?.deny ?? [])]
@@ -145,7 +188,6 @@ export function createCLI(config: CLIConfig = {}) {
             const input = await readJsonStdin<HookInput>()
             const sections = await collectPostWriteContext(input)
 
-            // Run extension if provided
             const ext = config.hooks?.["post-write"]
             if (ext) {
               const result = await ext(input)
@@ -171,7 +213,6 @@ export function createCLI(config: CLIConfig = {}) {
             const input = await readJsonStdin<HookInput>()
             const sections = await collectPostReadContext(input)
 
-            // Run extension if provided
             const ext = config.hooks?.["post-read"]
             if (ext) {
               const result = await ext(input)
@@ -194,12 +235,29 @@ export function createCLI(config: CLIConfig = {}) {
           }
 
           default: {
-            // Stub hooks — no extension mechanism
-            const handler = STUB_HOOKS[cmd]
-            if (handler) {
-              await handler()
-              return
+            // Extension hooks — no core logic, delegate to consumer
+            const hookDef = EXTENSION_HOOKS[cmd]
+            if (hookDef) {
+              const input = await readJsonStdin<HookInput>()
+              const ext = config.hooks?.[hookDef.key as keyof NonNullable<CLIConfig["hooks"]>]
+
+              if (typeof ext === "function") {
+                const result = await (ext as HookHandler)(input)
+                if (result?.additionalContext) {
+                  console.log(
+                    JSON.stringify({
+                      hookSpecificOutput: {
+                        hookEventName: hookDef.event,
+                        additionalContext: result.additionalContext,
+                      },
+                    }),
+                  )
+                }
+              }
+
+              process.exit(0)
             }
+
             // Unknown hook — silent exit
             process.exit(0)
           }
@@ -217,10 +275,10 @@ export function createCLI(config: CLIConfig = {}) {
 
       const ports = createControlPorts(root)
       const service = createControlService(ports)
-      const ctx: HookContext = { root, service }
 
       // Parse format flags
       const { mode, rest: args } = parseFormat(rawArgs)
+      const ctx: HookContext = { root, service, mode, render: (node) => render(node, mode) }
 
       try {
         // Custom commands first (override built-in)
@@ -238,28 +296,28 @@ export function createCLI(config: CLIConfig = {}) {
               process.exit(1)
             }
             const result = await service.commit({ message, files })
-            output(render(presentCommit(result), mode), mode)
+            console.log(render(presentCommit(result), mode), mode)
             break
           }
 
           case "rules": {
             const scopes = args.length > 0 ? args : ["."]
             const result = service.rules(scopes)
-            output(render(presentQuery(result), mode), mode)
+            console.log(render(presentQuery(result), mode), mode)
             break
           }
 
           case "diff": {
             const scopes = args.length > 0 ? args : ["."]
             const result = service.diff(scopes)
-            output(render(presentQuery(result), mode), mode)
+            console.log(render(presentQuery(result), mode), mode)
             break
           }
 
           case "commits": {
             const scopes = args.length > 0 ? args : ["."]
             const result = service.commits(scopes)
-            output(render(presentQuery(result), mode), mode)
+            console.log(render(presentQuery(result), mode), mode)
             break
           }
 
@@ -267,21 +325,21 @@ export function createCLI(config: CLIConfig = {}) {
             const changed = args.includes("--changed")
             const scopes = args.filter((a) => a !== "--changed")
             const result = await service.lint(scopes, { changed })
-            output(render(presentQuery(result), mode), mode)
+            console.log(render(presentQuery(result), mode), mode)
             if (result.what === "lint" && result.data.errorCount > 0) process.exit(1)
             break
           }
 
           case "typecheck": {
             const result = await service.typecheck(args)
-            output(render(presentQuery(result), mode), mode)
+            console.log(render(presentQuery(result), mode), mode)
             if (result.what === "typecheck" && result.data.errorCount > 0) process.exit(1)
             break
           }
 
           case "test": {
             const result = await service.test(args)
-            output(render(presentQuery(result), mode), mode)
+            console.log(render(presentQuery(result), mode), mode)
             if (result.what === "test" && result.data.errorCount > 0) process.exit(1)
             break
           }
@@ -300,7 +358,7 @@ export function createCLI(config: CLIConfig = {}) {
               }
             }
             const result = service.blame(file, lines)
-            output(render(presentGit(result), mode), mode)
+            console.log(render(presentGit(result), mode), mode)
             break
           }
 
@@ -313,7 +371,7 @@ export function createCLI(config: CLIConfig = {}) {
             const regex = args.includes("--regex")
             const scopes = args.slice(1).filter((a) => a !== "--regex")
             const result = service.pickaxe(pattern, { regex, scopes: scopes.length > 0 ? scopes : undefined })
-            output(render(presentGit(result), mode), mode)
+            console.log(render(presentGit(result), mode), mode)
             break
           }
 
@@ -328,21 +386,21 @@ export function createCLI(config: CLIConfig = {}) {
               process.exit(1)
             }
             const result = await service.bisect(testCmd, good, bad)
-            output(render(presentGit(result), mode), mode)
+            console.log(render(presentGit(result), mode), mode)
             break
           }
 
           case "eval": {
             const code = args.join(" ")
             const result = await service.eval({ code })
-            output(render(presentEval(result), mode), mode)
+            console.log(render(presentEval(result), mode), mode)
             if (!result.ok) process.exit(1)
             break
           }
 
           case "setup": {
             const result = service.setup()
-            output(render(presentSetup(result), mode), mode)
+            console.log(render(presentSetup(result), mode), mode)
             break
           }
 
@@ -352,13 +410,13 @@ export function createCLI(config: CLIConfig = {}) {
             const skill = skillIdx >= 0 ? args[skillIdx + 1] : undefined
             const minutes = minutesIdx >= 0 ? parseInt(args[minutesIdx + 1]!, 10) : undefined
             const result = service.transcripts({ skill, minutes })
-            output(render(presentTranscripts(result), mode), mode)
+            console.log(render(presentTranscripts(result), mode), mode)
             break
           }
 
           case "packages": {
             const packages = service.discoverPackages()
-            output(render(presentPackages(packages), mode), mode)
+            console.log(render(presentPackages(packages), mode), mode)
             break
           }
 
@@ -366,7 +424,7 @@ export function createCLI(config: CLIConfig = {}) {
             // Prettier formatting
             const scopes = args.length > 0 ? args : ["."]
             const formatResult = await service.lint(scopes) // HACK: reuses lint, should be separate
-            output(render(presentQuery(formatResult), mode), mode)
+            console.log(render(presentQuery(formatResult), mode), mode)
             break
           }
 

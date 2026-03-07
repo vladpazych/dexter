@@ -7,7 +7,11 @@
 
 // Factory
 export { createCLI } from "./cli.ts"
-export type { CLIConfig, HookContext, HookOutput, DenyPattern } from "./cli.ts"
+export type { CLIConfig, HookContext, HookOutput, HookHandler, DenyPattern } from "./cli.ts"
+
+// Output primitives (re-exported for convenience in custom commands)
+export { block, field, heading, list, text, render } from "../output/index.ts"
+export type { Node, OutputMode, Style } from "../output/index.ts"
 
 // Adapters (for custom commands that need low-level port access)
 export { createControlPorts } from "./adapters/index.ts"

@@ -1,7 +1,7 @@
 import { basename } from "node:path"
 
 import { block, text, render } from "../../output/index.ts"
-import { readJsonStdin, getFilePath, type HookInput } from "../lib/stdin.ts"
+import { getFilePath, type HookInput } from "../lib/stdin.ts"
 import { findRepoRoot } from "../lib/paths.ts"
 import { isSpecFile, findBrokenLinks, formatBrokenLinks } from "../lib/spec-links.ts"
 
@@ -48,21 +48,4 @@ export async function collectPostReadContext(input: HookInput | null): Promise<s
   }
 
   return sections
-}
-
-/** Standalone handler — reads stdin, collects context, outputs, exits. */
-export async function onPostRead(): Promise<void> {
-  const input = await readJsonStdin<HookInput>()
-  const sections = await collectPostReadContext(input)
-
-  if (sections.length > 0) {
-    console.log(
-      JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext: sections.join("\n") + "\n",
-        },
-      }),
-    )
-  }
 }

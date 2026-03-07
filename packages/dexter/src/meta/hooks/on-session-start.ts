@@ -1,32 +1,25 @@
 import { resolve } from "node:path"
 import { findRepoRoot } from "../lib/paths.ts"
 
-export async function onSessionStart(): Promise<void> {
+/** Collect core session-start context sections. Returns array of context strings. */
+export async function collectSessionStartContext(): Promise<string[]> {
   let root: string
   try {
     root = findRepoRoot()
   } catch {
-    return
+    return []
   }
 
-  // Check if meta/run exists — only inject context for repos that use dexter
-  const metaRun = Bun.file(resolve(root, "meta/run"))
-  if (!(await metaRun.exists())) return
+  // Check if meta/index.ts exists — only inject context for repos that use dexter
+  const metaIndex = Bun.file(resolve(root, "meta/index.ts"))
+  if (!(await metaIndex.exists())) return []
 
   // Read CONTEXT.md from the plugin package root (three levels up from src/meta/hooks/)
   const contextPath = resolve(import.meta.dir, "..", "..", "..", "CONTEXT.md")
   const contextFile = Bun.file(contextPath)
 
-  if (!(await contextFile.exists())) return
+  if (!(await contextFile.exists())) return []
 
   const content = await contextFile.text()
-
-  console.log(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "SessionStart",
-        additionalContext: content,
-      },
-    }),
-  )
+  return [content]
 }

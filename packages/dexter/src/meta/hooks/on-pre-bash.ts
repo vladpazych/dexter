@@ -1,4 +1,4 @@
-import { readJsonStdin, getCommand, type HookInput } from "../lib/stdin.ts"
+import { getCommand, type HookInput } from "../lib/stdin.ts"
 
 export type DenyPattern = { pattern: RegExp; hint: string }
 
@@ -56,24 +56,4 @@ export async function checkPreBash(
   }
 
   return null
-}
-
-/** Standalone handler — reads stdin, checks core patterns, exits. */
-export async function onPreBash(): Promise<void> {
-  const input = await readJsonStdin<HookInput>()
-  const reason = await checkPreBash(input, CORE_DENY_PATTERNS)
-
-  if (reason) {
-    console.log(
-      JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: reason,
-        },
-      }),
-    )
-  }
-
-  process.exit(0)
 }

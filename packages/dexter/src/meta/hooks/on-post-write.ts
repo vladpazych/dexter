@@ -1,5 +1,5 @@
 import { block, text, render } from "../../output/index.ts"
-import { readJsonStdin, getFilePath, type HookInput } from "../lib/stdin.ts"
+import { getFilePath, type HookInput } from "../lib/stdin.ts"
 import { shouldLint, runESLint } from "../lib/eslint.ts"
 import { findRepoRoot, isInsideRepo } from "../lib/paths.ts"
 import { isSpecFile, findBrokenLinks, formatBrokenLinks } from "../lib/spec-links.ts"
@@ -48,26 +48,7 @@ export async function collectPostWriteContext(input: HookInput | null): Promise<
     }
   }
 
-  sections.push(xml("commit", `commit in meaningful chunks · ./meta/run commit "<reason>" <files>`))
+  sections.push(xml("commit", `commit in meaningful chunks · bun run meta/index.ts commit "<reason>" <files>`))
 
   return sections
-}
-
-/** Standalone handler — reads stdin, collects context, outputs, exits. */
-export async function onPostWrite(): Promise<void> {
-  const input = await readJsonStdin<HookInput>()
-  const sections = await collectPostWriteContext(input)
-
-  if (sections.length > 0) {
-    console.log(
-      JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext: sections.join("\n"),
-        },
-      }),
-    )
-  }
-
-  process.exit(0)
 }
