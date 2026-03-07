@@ -14,8 +14,6 @@ Every document has an audience and a category. Category determines audience — 
 | llm | claude-md | CLAUDE.md |
 | llm | skill | SKILL.md |
 | human | readme | README.md |
-| human | mr-description | MR/PR body |
-| human | research | *.md (standalone) |
 
 ## Process
 
