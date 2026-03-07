@@ -22,32 +22,3 @@ export function isHuman(): boolean {
   return getActor() === "human"
 }
 
-/**
- * Output mode constraints by actor.
- *
- * LLM: minimal output, inline only, never TUI/interactive
- * Human: supports inline and interactive
- */
-export interface ActorOutputMode {
-  /** Use minimal output (no decorations, progress bars, etc.) */
-  minimal: boolean
-  /** Allow interactive prompts */
-  interactive: boolean
-  /** Allow TUI (full-screen terminal UI) */
-  tui: boolean
-}
-
-export function getOutputMode(): ActorOutputMode {
-  if (isLLM()) {
-    return {
-      minimal: true,
-      interactive: false,
-      tui: false,
-    }
-  }
-  return {
-    minimal: false,
-    interactive: true,
-    tui: true,
-  }
-}
