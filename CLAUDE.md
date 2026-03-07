@@ -52,3 +52,7 @@ await createCLI({
 ```
 
 Dependencies point inward: consumer meta/ -> dexter. Never the reverse.
+
+## Gotchas
+
+- Emergency brake: `touch .claude/hooks-disabled`. Remove immediately after fix.

@@ -36,7 +36,7 @@ Primary trigger mechanism. Always in context (~100 words budget). List every tri
 
 ### Dynamic preprocessing
 
-`!`command`` runs shell commands BEFORE the subagent starts. Output replaces the placeholder.
+!`command` runs shell commands BEFORE the subagent starts. Output replaces the placeholder.
 
 ```
 Changed files:
@@ -110,7 +110,7 @@ Skill `agent: <name>` routes to a custom agent. They compose:
 ### When to compose (skill + agent)
 
 - `/name` invocation AND tool restriction needed
-- Preprocessing (`!`command``) AND custom system prompt needed
+- Preprocessing (!`command`) AND custom system prompt needed
 - Argument parsing AND hard tool allowlist needed
 
 ### When skill alone suffices
@@ -129,13 +129,13 @@ Skill `agent: <name>` routes to a custom agent. They compose:
 
 ## Verified mechanics
 
-Tested with canary strings planted in agent body, skill body, and `!`command`` output.
+Tested with canary strings planted in agent body, skill body, and !`command` output.
 
 | Mechanic | Result |
 |:---------|:-------|
 | Agent body -> system prompt | Canary found in subagent system context |
 | Skill body -> task | Canary found in task preamble (with skill base directory metadata) |
-| `!`command`` expansion | Echo output injected before subagent received task |
+| !`command` expansion | Echo output injected before subagent received task |
 | Fork = no history | Zero prior conversation messages visible |
 | Agent `tools` = hard restrict | Only specified tools available (others absent, not just unpermitted) |
 

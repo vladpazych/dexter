@@ -1,0 +1,7 @@
+{
+  "name": "dexter",
+  "version": "0.1.13",
+  "description": "Agentic development toolkit — quality-gated commits, hook framework, CLI primitives, convention enforcement",
+  "author": { "name": "vladpazych" },
+  "repository": "https://github.com/vladpazych/dexter"
+}
