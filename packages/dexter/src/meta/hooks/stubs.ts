@@ -6,7 +6,7 @@
 
 import { readJsonStdin, type HookInput } from "../lib/stdin.ts"
 
-export async function onSessionStart(): Promise<void> {}
+// onSessionStart moved to on-session-start.ts
 
 export async function onPostBash(): Promise<void> {
   await readJsonStdin<HookInput>()

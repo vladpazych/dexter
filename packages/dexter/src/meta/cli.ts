@@ -27,8 +27,8 @@ import { createControlService, type ControlService } from "./domain/service.ts"
 import { onPreBash } from "./hooks/on-pre-bash.ts"
 import { onPostWrite } from "./hooks/on-post-write.ts"
 import { onPostRead } from "./hooks/on-post-read.ts"
+import { onSessionStart } from "./hooks/on-session-start.ts"
 import {
-  onSessionStart,
   onPostBash,
   onStop,
   onPromptSubmit,
