@@ -36,7 +36,7 @@
   },
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
-    "dexter": true
+    "dexter@dexter-marketplace": true
   },
   "statusLine": {
     "type": "command",

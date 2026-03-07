@@ -1,0 +1,15 @@
+{
+  "name": "dexter-marketplace",
+  "owner": {
+    "name": "vladpazych",
+    "url": "https://github.com/vladpazych"
+  },
+  "plugins": [
+    {
+      "name": "dexter",
+      "version": "0.1.13",
+      "description": "Agentic development toolkit — quality-gated commits, hook framework, CLI primitives, convention enforcement",
+      "source": "./packages/dexter"
+    }
+  ]
+}
