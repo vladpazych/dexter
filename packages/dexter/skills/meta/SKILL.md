@@ -22,7 +22,9 @@ See `references/architecture.md` for the full flow.
 
 ## Init — scaffold a new repo
 
-1. Create `meta/index.ts`:
+1. Add `@vladpazych/dexter` to root `devDependencies`. Run `bun install`.
+
+2. Create `meta/index.ts`:
 
 ```ts
 import { createCLI } from "@vladpazych/dexter/meta"
@@ -33,11 +35,9 @@ await createCLI({
 }).run()
 ```
 
-2. Create `meta/package.json` with `@vladpazych/dexter` dependency. Run `bun install`.
-
 3. Enable the dexter plugin in `.claude/settings.json`. The plugin provides all hook wiring — do NOT add inline hooks to settings.json (causes double-firing).
 
-That's it. Two files: `index.ts` and `package.json`. The plugin's `hooks.json` handles PATH setup and bun invocation.
+That's it. One file: `meta/index.ts`. The dependency lives in root `devDependencies`, and the plugin's `hooks.json` handles PATH setup and bun invocation.
 
 ## Add command
 

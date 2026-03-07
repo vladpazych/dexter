@@ -14,12 +14,13 @@ my-repo/
 │   └── settings.json        ← permissions, plugin enablement
 ├── meta/
 │   ├── index.ts              ← composition root (createCLI)
-│   ├── package.json          ← depends on @vladpazych/dexter
 │   └── commands/             ← project-specific commands
 ├── packages/                 ← application code
 ├── CLAUDE.md
-└── package.json              ← workspace root
+└── package.json              ← workspace root (devDependencies has @vladpazych/dexter)
 ```
+
+`meta/` is not a workspace package — it's just a directory with TypeScript files. The `@vladpazych/dexter` dependency lives in root `devDependencies` and Bun resolves it from the root `node_modules/`.
 
 ## Execution flow
 
@@ -59,4 +60,4 @@ consumer meta/ → @vladpazych/dexter/meta    (consumer depends on dexter)
                                              (never the reverse)
 ```
 
-The `meta/` workspace has its own `package.json` with dexter as a dependency. Application packages never import from `meta/`. The meta directory is a leaf in the dependency graph.
+Application packages never import from `meta/`. The meta directory is a leaf in the dependency graph — it imports from dexter, nothing imports from it.
