@@ -1,7 +1,7 @@
 /**
  * release — bump version, commit, tag, push.
  *
- * Usage: ./meta/run release patch|minor|major
+ * Usage: bun run meta/index.ts release patch|minor|major
  */
 
 import type { HookContext } from "@vladpazych/dexter/meta"
@@ -42,13 +42,15 @@ export async function release(args: string[], ctx: HookContext): Promise<void> {
   pkg.version = nextVersion
   await Bun.write(pkgPath, JSON.stringify(pkg, null, 2) + "\n")
 
-  // Update version.ts
-  const versionTsPath = `${pkgDir}/src/version.ts`
-  await Bun.write(versionTsPath, `export const version = "${nextVersion}"\n`)
+  // Update plugin.json
+  const pluginPath = `${pkgDir}/.claude-plugin/plugin.json`
+  const plugin = JSON.parse(await Bun.file(pluginPath).text())
+  plugin.version = nextVersion
+  await Bun.write(pluginPath, JSON.stringify(plugin, null, 2) + "\n")
 
   // Commit + tag
   const tag = `v${nextVersion}`
-  const commitResult = Bun.spawnSync(["git", "add", pkgPath, versionTsPath], { cwd: ctx.root })
+  const commitResult = Bun.spawnSync(["git", "add", pkgPath, pluginPath], { cwd: ctx.root })
   if (commitResult.exitCode !== 0) {
     console.error("git add failed")
     process.exit(1)

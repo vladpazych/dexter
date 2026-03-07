@@ -1,41 +1,28 @@
 ---
 name: meta
-description: "Set up and extend the dexter meta framework. Create meta/run, meta/index.ts, custom commands, hook extensions. Triggers: /meta, meta setup, scaffold meta, add command, add hook. NOT: direct code changes, test fixes."
-argument-hint: "[init|add-command|add-hook]"
+description: "Set up and extend the dexter meta framework. Create meta/index.ts, custom commands, hook extensions, output formatting. Triggers: /meta, meta setup, scaffold meta, add command, add hook, how does dexter work, explain meta, hook wiring, output format, emergency brake, debug hooks. NOT: direct code changes, test fixes, markdown authoring."
+argument-hint: "[init|add-command|add-hook|explain]"
 ---
 
 # Meta Framework
 
-Bootstrap and extend the dexter meta CLI in a consumer repo.
+Dexter's meta framework gives every repo a programmable CLI at `meta/index.ts`. It handles hook dispatch, quality gates, and domain commands. Consumer repos extend it with project-specific commands and hook callbacks.
 
 ## Architecture
 
-Plugin hooks fire on Claude Code events (PreToolUse, PostToolUse, Stop) and delegate to `$CLAUDE_PROJECT_DIR/meta/run on-<event>`. The `meta/run` shell wrapper calls `meta/index.ts` via Bun, which uses `createCLI()` to dispatch to core handlers and consumer extensions.
+```
+Claude Code event → hooks.json → bun run meta/index.ts on-<event> → createCLI().run() → core + extension
+```
 
-```
-Claude Code event → plugin hook → meta/run → createCLI().run() → handler
-```
+- `hooks.json` in the dexter plugin wires Claude Code events directly to `bun run meta/index.ts`
+- `meta/index.ts` is the composition root — calls `createCLI()` with custom commands and hooks
+- `createCLI()` dispatches to core handlers first, then runs consumer extensions
+
+See `references/architecture.md` for the full flow.
 
 ## Init — scaffold a new repo
 
-1. Create `meta/run`:
-
-```sh
-#!/bin/sh
-DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
-ROOT="${CLAUDE_PROJECT_DIR:-${DIR%/meta}}"
-export PATH="$HOME/.bun/bin:$PATH"
-case "$1" in
-  on-*)
-    [ -f "$ROOT/.claude/hooks-disabled" ] && exit 0
-    ;;
-esac
-exec bun run "$ROOT/meta/index.ts" "$@"
-```
-
-2. Make executable: `chmod +x meta/run`
-
-3. Create `meta/index.ts`:
+1. Create `meta/index.ts`:
 
 ```ts
 import { createCLI } from "@vladpazych/dexter/meta"
@@ -46,84 +33,81 @@ await createCLI({
 }).run()
 ```
 
-4. Create `meta/package.json`:
+2. Create `meta/package.json` with `@vladpazych/dexter` dependency. Run `bun install`.
 
-```json
-{
-  "name": "meta",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@vladpazych/dexter": "latest"
-  }
-}
-```
+3. Enable the dexter plugin in `.claude/settings.json`. The plugin provides all hook wiring — do NOT add inline hooks to settings.json (causes double-firing).
 
-5. Run `bun install` in `meta/`.
-
-6. Add `Bash(./meta/run:*)` to `.claude/settings.json` permissions.
+That's it. Two files: `index.ts` and `package.json`. The plugin's `hooks.json` handles PATH setup and bun invocation.
 
 ## Add command
 
-Extend `createCLI()` with a new command:
+```ts
+import { block, field, text, type HookContext } from "@vladpazych/dexter/meta"
+
+export async function deploy(args: string[], ctx: HookContext) {
+  // ctx.root — repo root
+  // ctx.service — commit, lint, typecheck, test, diff, rules, blame, pickaxe, bisect, eval
+  // ctx.mode — active output format (cli|json|xml|md)
+  // ctx.render(node) — render a Node tree in the active format
+  const node = block("deploy", field("env", args[0] ?? "staging"), field("status", text("ok", "green")))
+  console.log(ctx.render(node))
+}
+```
+
+Register in `meta/index.ts`:
 
 ```ts
 await createCLI({
   commands: {
-    "command-name": async (args, ctx) => {
-      // args: string[] — positional arguments after command name
-      // ctx.root: string — repo root path
-      // ctx.service: ControlService — dexter domain service
-    },
+    deploy: (args, ctx) => import("./commands/deploy.ts").then(m => m.deploy(args, ctx)),
   },
 }).run()
 ```
 
-Run via `./meta/run command-name [args]`.
+Run: `bun run meta/index.ts deploy production --json`
+
+See `references/output.md` for the full output primitive API.
 
 ## Add hook extension
 
-Extend built-in hooks with project-specific behavior:
+All Claude Code hook events are extensible. See `references/hooks.md` for the complete list.
 
 ```ts
 await createCLI({
   hooks: {
+    // Merge deny patterns into pre-bash (blocks dangerous commands)
     "pre-bash": {
-      deny: [
-        { pattern: /dangerous-command/, hint: "Use safe-alternative instead" },
-      ],
+      deny: [{ pattern: /^docker\s+rm/, hint: "Use docker compose down instead." }],
     },
-    "post-read": (input, ctx) => {
-      // Return { additionalContext: "..." } to inject context into Claude's conversation
-    },
-    "post-write": (input, ctx) => {
-      // Runs after file writes — add project-specific validation
+    // Inject context after file reads
+    "post-read": (input) => ({
+      additionalContext: "All API endpoints require auth headers.",
+    }),
+    // React to file writes
+    "post-write": (input) => ({
+      additionalContext: "Run tests before committing.",
+    }),
+    // React to session end
+    "session-end": (input) => {
+      console.error("Session ended")
     },
   },
 }).run()
 ```
 
-## Built-in commands
-
-Available via `./meta/run <command>`:
-
-| Command | Purpose |
-|:--------|:--------|
-| commit | Quality-gated atomic commit |
-| rules | CLAUDE.md cascade for scopes |
-| diff | Git status + diff for scopes |
-| commits | Recent commit history |
-| lint | ESLint across workspace |
-| typecheck | TypeScript checking |
-| test | Run tests |
-| blame | Structured git blame |
-| pickaxe | Find commits by pattern |
-| bisect | Binary search for bad commit |
-| eval | Sandboxed TypeScript REPL |
-| setup | Configure .claude/settings |
-| transcripts | List subagent transcripts |
-| packages | List workspace packages |
-
 ## Emergency brake
 
-Touch `.claude/hooks-disabled` to bypass all hook handlers. Remove after fixing: `rm .claude/hooks-disabled`.
+```sh
+touch .claude/hooks-disabled   # bypass all hooks instantly
+rm .claude/hooks-disabled      # re-enable after fix
+```
+
+`createCLI()` checks this file before dispatching any `on-*` hook. Useful when a hook crashes and blocks Claude.
+
+## Debugging
+
+1. Test hooks manually: `echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bun run meta/index.ts on-pre-bash`
+2. Test commands: `bun run meta/index.ts diff --json`
+3. Check plugin wiring: read the plugin's `hooks/hooks.json`
+4. If hooks fire twice, remove inline hooks from `.claude/settings.json` — the plugin provides them
+5. Verify linking: `ls -la node_modules/@vladpazych/dexter` — should be a symlink for dev

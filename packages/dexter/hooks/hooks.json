@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/meta/run on-session-start"
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-session-start"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/meta/run on-pre-bash"
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-pre-bash"
           }
         ]
       }
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/meta/run on-post-write"
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-post-write"
           }
         ]
       },
@@ -36,7 +36,26 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/meta/run on-post-read"
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-post-read"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-post-bash"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-notification"
           }
         ]
       }
@@ -46,7 +65,37 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/meta/run on-stop"
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-stop"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-subagent-start"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-subagent-stop"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PATH=$HOME/.bun/bin:$PATH bun run $CLAUDE_PROJECT_DIR/meta/index.ts on-session-end"
           }
         ]
       }

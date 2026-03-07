@@ -28,20 +28,19 @@
       "Bash(mkdir:*)",
       "Bash(pwd:*)",
       "Bash(which:*)",
-      "Bash(./meta/run:*)",
       "Edit",
       "Read",
       "Write"
     ]
   },
-  "enabledPlugins": {
-    "typescript-lsp@claude-plugins-official": true,
-    "dexter@dexter-marketplace": true
-  },
   "statusLine": {
     "type": "command",
     "command": "$CLAUDE_PROJECT_DIR/.claude/statusline.sh",
     "padding": 0
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "dexter@dexter-marketplace": true
   },
   "spinnerTipsEnabled": false
 }

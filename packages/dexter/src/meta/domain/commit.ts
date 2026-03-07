@@ -41,7 +41,7 @@ export async function commit(ports: ControlPorts, params: CommitParams): Promise
   }
 
   if (files.length === 0) {
-    fail("no_files", "no files to commit", ['./meta/run commit "message" file1 file2 ...'])
+    fail("no_files", "no files to commit", ['bun run meta/index.ts commit "message" file1 file2 ...'])
   }
 
   const quality = await checkQuality(ports, files)

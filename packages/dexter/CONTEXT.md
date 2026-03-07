@@ -1,6 +1,6 @@
 # Dexter Meta CLI
 
-This repo uses dexter for agentic development. Run commands via `./meta/run <command>`.
+This repo uses dexter for agentic development. Run commands via `bun run meta/index.ts <command>`.
 
 ## Commands
 
@@ -21,9 +21,20 @@ This repo uses dexter for agentic development. Run commands via `./meta/run <com
 | `packages` | List workspace packages |
 | `setup` | Configure .claude/settings |
 
+## Custom commands
+
+Repos can extend with project-specific commands in `meta/index.ts` via `createCLI({ commands: { ... } })`. Custom commands receive `(args, ctx)` where `ctx` provides:
+
+- `ctx.root` — repo root path
+- `ctx.service` — ControlService (commit, lint, typecheck, test, diff, rules, blame, pickaxe, bisect, eval)
+- `ctx.mode` — active output format (`cli` | `json` | `xml` | `md`)
+- `ctx.render(node)` — render a Node tree in the active format
+
+Output primitives (`block`, `field`, `list`, `text`, `heading`) are available from `@vladpazych/dexter/meta`.
+
 ## Conventions
 
-- Commit atomically after each logical change via `./meta/run commit "reason" file1 file2`
+- Commit atomically after each logical change via `bun run meta/index.ts commit "reason" file1 file2`
 - State the problem in commit messages, not the solution. Max 72 chars. No type prefixes.
 - Use `--format json|xml|md` for structured output from any command
 - Emergency brake: `touch .claude/hooks-disabled` to bypass all hooks

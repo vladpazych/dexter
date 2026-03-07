@@ -30,16 +30,12 @@ await createCLI({
 }).run()
 ```
 
-Wire it to Claude Code hooks via `.claude/settings.json`:
+Enable the dexter plugin in `.claude/settings.json` — it wires all Claude Code hooks automatically:
 
 ```json
 {
-  "hooks": {
-    "PreToolUse": [{ "matcher": "Bash", "hooks": ["$CLAUDE_PROJECT_DIR/meta/run on-pre-bash"] }],
-    "PostToolUse": [
-      { "matcher": "Write", "hooks": ["$CLAUDE_PROJECT_DIR/meta/run on-post-write"] },
-      { "matcher": "Read", "hooks": ["$CLAUDE_PROJECT_DIR/meta/run on-post-read"] }
-    ]
+  "enabledPlugins": {
+    "dexter@dexter-marketplace": true
   }
 }
 ```
