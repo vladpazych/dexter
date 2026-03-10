@@ -11,6 +11,7 @@
     "@repo/meta-config": "workspace:*",
     "@types/bun": "^1",
     "@vladpazych/dexter": "workspace:*",
+    "@vladpazych/dexter-bun": "workspace:*",
     "eslint": "^9.22.0",
     "jiti": "^2.4.2"
   },

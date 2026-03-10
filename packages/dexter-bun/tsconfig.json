@@ -1,0 +1,7 @@
+{
+  "extends": "@repo/meta-config/tsconfig/bundler.json",
+  "compilerOptions": {
+    "types": ["bun"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

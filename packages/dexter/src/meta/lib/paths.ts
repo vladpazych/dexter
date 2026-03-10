@@ -2,20 +2,19 @@
  * Path utilities for finding repo root.
  */
 
+import { spawnSync } from "node:child_process"
 import { existsSync, realpathSync } from "node:fs"
-import { join } from "node:path"
 
 /**
  * Find the repo root by asking git for the worktree root.
  * Returns absolute path or throws if not found.
  */
 export function findRepoRoot(): string {
-  const result = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"], {
-    stdout: "pipe",
-    stderr: "pipe",
+  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
   })
-  if (result.success) {
-    const root = result.stdout.toString().trim()
+  if (result.status === 0 && result.error === undefined) {
+    const root = result.stdout.trim()
     if (root) return realpathSync(root)
   }
 

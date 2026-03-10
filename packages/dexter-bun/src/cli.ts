@@ -1,15 +1,10 @@
-/**
- * Dexter standalone CLI — loads and runs repo-local dexter config.
- */
-
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 
-import { loadEnv } from "./env/loader.ts"
-import { createCLI, type CLIConfig } from "./meta/cli.ts"
-import { findRepoRoot } from "./meta/lib/paths.ts"
-import { version } from "./version.js"
+import { loadEnv } from "@vladpazych/dexter/env"
+import { createCLI, findRepoRoot, type CLIConfig } from "@vladpazych/dexter/cli"
+import { version } from "@vladpazych/dexter"
 
 type ConfigModule = {
   default?: unknown

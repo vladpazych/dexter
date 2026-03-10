@@ -15,8 +15,20 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Typecheck
+      - name: Typecheck core
         run: bun run --cwd packages/dexter typecheck
 
-      - name: Test
+      - name: Typecheck bun runtime
+        run: bun run --cwd packages/dexter-bun typecheck
+
+      - name: Typecheck node runtime
+        run: bun run --cwd packages/dexter-node typecheck
+
+      - name: Test core
         run: bun test packages/dexter/
+
+      - name: Test bun runtime
+        run: bun test packages/dexter-bun/
+
+      - name: Test node runtime
+        run: bun test packages/dexter-node/

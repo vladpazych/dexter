@@ -33,16 +33,14 @@ describe("createCLI", () => {
     const cli = createCLI({
       description: "custom meta",
       commands: {
-        inspect: command({
-          description: "Inspect parsed inputs.",
-          args: [
-            {
-              name: "target",
-              description: "Target value.",
-              schema: z.string(),
-            },
-          ] as const,
-          options: {
+        inspect: command()
+          .description("Inspect parsed inputs.")
+          .args({
+            name: "target",
+            description: "Target value.",
+            schema: z.string(),
+          })
+          .options({
             verbose: {
               description: "Enable verbose output.",
               schema: z.boolean().optional(),
@@ -51,14 +49,14 @@ describe("createCLI", () => {
               description: "Retry count.",
               schema: z.coerce.number().default(0),
             },
-          },
-          run(input, ctx) {
+          })
+          .run((input, ctx) => {
             seenRoot = ctx.root
             seenMode = ctx.mode
             seenInput = input
             return "ok"
-          },
-        }),
+          })
+          .build(),
       },
     })
 
@@ -149,23 +147,21 @@ describe("createCLI", () => {
     const log = spyOn(console, "log").mockImplementation(() => {})
     const cli = createCLI({
       commands: {
-        release: command({
-          description: "Create a release.",
-          args: [
-            {
-              name: "bump",
-              description: "Version bump.",
-              schema: z.enum(["patch", "minor", "major"]),
-            },
-          ] as const,
-          options: {
+        release: command()
+          .description("Create a release.")
+          .args({
+            name: "bump",
+            description: "Version bump.",
+            schema: z.enum(["patch", "minor", "major"]),
+          })
+          .options({
             signoff: {
               description: "Require signoff.",
               schema: z.boolean().optional(),
             },
-          },
-          run: () => undefined,
-        }),
+          })
+          .run(() => undefined)
+          .build(),
       },
     })
 
@@ -189,17 +185,15 @@ describe("createCLI", () => {
         db: {
           description: "Database utilities.",
           commands: {
-            migrate: command({
-              description: "Run migrations.",
-              args: [
-                {
-                  name: "target",
-                  description: "Migration target.",
-                  schema: z.string(),
-                },
-              ] as const,
-              run: () => undefined,
-            }),
+            migrate: command()
+              .description("Run migrations.")
+              .args({
+                name: "target",
+                description: "Migration target.",
+                schema: z.string(),
+              })
+              .run(() => undefined)
+              .build(),
           },
         },
       },
@@ -242,17 +236,15 @@ describe("createCLI", () => {
     const error = spyOn(console, "error").mockImplementation(() => {})
     const cli = createCLI({
       commands: {
-        inspect: command({
-          description: "Inspect parsed inputs.",
-          args: [
-            {
-              name: "target",
-              description: "Target value.",
-              schema: z.string(),
-            },
-          ] as const,
-          run: () => undefined,
-        }),
+        inspect: command()
+          .description("Inspect parsed inputs.")
+          .args({
+            name: "target",
+            description: "Target value.",
+            schema: z.string(),
+          })
+          .run(() => undefined)
+          .build(),
       },
     })
 
@@ -270,17 +262,15 @@ describe("createCLI", () => {
     const error = spyOn(console, "error").mockImplementation(() => {})
     const cli = createCLI({
       commands: {
-        inspect: command({
-          description: "Inspect parsed inputs.",
-          args: [
-            {
-              name: "target",
-              description: "Target value.",
-              schema: z.string(),
-            },
-          ] as const,
-          run: () => undefined,
-        }),
+        inspect: command()
+          .description("Inspect parsed inputs.")
+          .args({
+            name: "target",
+            description: "Target value.",
+            schema: z.string(),
+          })
+          .run(() => undefined)
+          .build(),
       },
     })
 
@@ -414,26 +404,24 @@ describe("createCLI", () => {
         db: {
           description: "Database utilities.",
           commands: {
-            migrate: command({
-              description: "Run migrations.",
-              args: [
-                {
-                  name: "target",
-                  description: "Migration target.",
-                  schema: z.string(),
-                },
-              ] as const,
-              options: {
+            migrate: command()
+              .description("Run migrations.")
+              .args({
+                name: "target",
+                description: "Migration target.",
+                schema: z.string(),
+              })
+              .options({
                 dryRun: {
                   description: "Preview without applying.",
                   schema: z.boolean().optional(),
                 },
-              },
-              run(input) {
+              })
+              .run((input) => {
                 seenInput = input
                 return "ok"
-              },
-            }),
+              })
+              .build(),
           },
         },
       },

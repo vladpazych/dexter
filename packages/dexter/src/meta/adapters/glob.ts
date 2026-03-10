@@ -1,14 +1,15 @@
 /**
- * GlobPort adapter — wraps Bun.Glob for pattern matching.
+ * GlobPort adapter — wraps minimatch for pattern matching.
  */
+
+import { minimatch } from "minimatch"
 
 import type { GlobPort } from "../ports.ts"
 
-export function createBunGlob(): GlobPort {
+export function createNodeGlob(): GlobPort {
   return {
     match(pattern, candidates) {
-      const glob = new Bun.Glob(pattern)
-      return candidates.filter((f) => glob.match(f))
+      return candidates.filter((file) => minimatch(file, pattern, { dot: true }))
     },
   }
 }

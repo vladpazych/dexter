@@ -6,17 +6,17 @@ import { tmpdir } from "node:os"
 
 import type { RepoPorts } from "../ports.ts"
 
-import { createBunGit } from "./git.ts"
+import { createNodeGit } from "./git.ts"
 import { createNodeFs } from "./fs.ts"
+import { createNodeGlob } from "./glob.ts"
 import { createNodeProcess } from "./process.ts"
-import { createBunGlob } from "./glob.ts"
 
 export function createRepoPorts(root: string): RepoPorts {
   return {
-    git: createBunGit(),
+    git: createNodeGit(),
     fs: createNodeFs(),
     process: createNodeProcess(),
-    glob: createBunGlob(),
+    glob: createNodeGlob(),
     tmpdir: () => tmpdir(),
     root,
   }

@@ -1,5 +1,5 @@
 /**
- * @vladpazych/dexter — self-describing repo command runtime and tooling helpers.
+ * @vladpazych/dexter — self-describing repo command primitives and tooling helpers.
  *
  * Subpath exports:
  *   dexter/cli      — self-describing repo command runtime and helpers

@@ -86,10 +86,13 @@ export const c = {
   bolded: wrap(bold),
 }
 
+const ANSI_PATTERN =
+  // Matches CSI, OSC, and a small set of single-character ANSI control sequences.
+  /\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\x1B\\)|[@-Z\\-_])/g
+
 /**
  * Strip ANSI escape codes from string.
- * Uses Bun's native Zig implementation (6-57x faster than regex).
  */
 export function stripAnsi(str: string): string {
-  return Bun.stripANSI(str)
+  return str.replace(ANSI_PATTERN, "")
 }

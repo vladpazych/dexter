@@ -2,12 +2,13 @@
  * CLI framework — self-describing repo command runtime.
  */
 
-export { command, createCLI, defineConfig } from "./cli.ts"
+export { args, command, createCLI, defineConfig } from "./cli.ts"
 export type {
   AnyCommand,
   CLIConfig,
   CLIContext,
   CommandArg,
+  CommandBuilder,
   CommandDefinition,
   CommandInput,
   CommandNamespace,

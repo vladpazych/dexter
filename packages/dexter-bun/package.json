@@ -1,0 +1,33 @@
+{
+  "name": "@vladpazych/dexter-bun",
+  "version": "1.0.0",
+  "description": "Bun runtime for Dexter repo CLI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vladpazych/dexter.git",
+    "directory": "packages/dexter-bun"
+  },
+  "type": "module",
+  "files": [
+    "src",
+    "bin"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "dexter": "./bin/dexter"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@vladpazych/dexter": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1"
+  }
+}

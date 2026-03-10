@@ -1,6 +1,5 @@
 #!/bin/sh
-# Dexter CLI entry point.
-# Delegates to the TypeScript source via Bun — no build step.
+# Dexter Bun CLI entry point.
 
 SOURCE="$0"
 while [ -L "$SOURCE" ]; do

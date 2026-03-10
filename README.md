@@ -1,57 +1,55 @@
 # Dexter
 
-Dexter is a Bun monorepo for building self-describing repo CLIs. This repository contains the published `@vladpazych/dexter` package, the private workspace packages it uses for its own dogfooded CLI, and the source for the `dexter` command itself.
+Typed repo commands for LLM-driven codebases.
 
-## Quick Start
+```ts
+import { command, defineConfig } from "@vladpazych/dexter/cli"
+import { z } from "zod"
 
-Install workspace dependencies:
+const greet = command()
+  .description("Print a greeting.")
+  .args({
+    name: "target",
+    description: "Who to greet.",
+    schema: z.string(),
+  })
+  .run(({ args }) => `hello ${args.target}`)
+  .build()
 
-```sh
-~/.bun/bin/bun install
+export default defineConfig({
+  commands: {
+    greet,
+    syncSkills,
+    resolveSpecs,
+    typecheckChanged,
+    testChanged,
+    publishPackage,
+    envDoctor,
+  },
+})
 ```
 
-Typecheck the published package:
-
 ```sh
-~/.bun/bin/bun run --cwd packages/dexter typecheck
+dexter help
+dexter greet world
+dexter sync-skills
+dexter resolve-specs packages/dexter/src
 ```
 
-Run the package test suite:
+## What It Is
 
-```sh
-~/.bun/bin/bun test packages/dexter/test
-```
+- A typed internal CLI for repos that humans and agents both operate
+- A way to turn repo workflows into explicit commands instead of scripts and prompt lore
+- A small set of primitives for env loading, subprocess work, spec resolution, and skill sync
 
-Inspect the repo's own Dexter commands:
+## Who It’s For
 
-```sh
-packages/dexter/bin/dexter help
-```
+- LLM-heavy repos that need discoverable, inspectable workflows
+- Monorepos with too much logic hiding in `package.json`, shell scripts, or tribal knowledge
+- Teams that want agents to use the same command surface as humans
 
-For package-level usage and installation in another repo, start with [packages/dexter/README.md](packages/dexter/README.md).
+## Start Here
 
-## Concepts
-
-Dexter treats a repo CLI as source code, not as a pile of shell scripts.
-
-- A repo defines its command surface in [`dexter.config.ts`](dexter.config.ts).
-- Leaf commands declare their own description, args, options, and runtime behavior.
-- The published package exposes small, typed subpaths such as `@vladpazych/dexter/cli`, `env`, `pipe`, `terminal`, `spec`, and `skills`.
-- This repo uses Dexter to run its own internal release workflow from [`meta/commands/release.ts`](meta/commands/release.ts).
-
-If you found this project through search and want to understand the library first, the main package lives in [`packages/dexter`](packages/dexter). If you want to understand how the monorepo itself is wired, start at [`dexter.config.ts`](dexter.config.ts) and then follow the private packages under [`meta`](meta).
-
-## Structure
-
-- [`packages/dexter`](packages/dexter) is the published package. It contains the runtime, subpath exports, CLI entrypoint, and package tests.
-- [`meta/config`](meta/config) is the private shared config package for ESLint and TypeScript presets used in this repo.
-- [`meta/commands`](meta/commands) is the private command package consumed by the root Dexter config.
-- [`dexter.config.ts`](dexter.config.ts) is the repo's composition root for its own CLI.
-
-## Development
-
-This monorepo stays intentionally small. Most work happens in `packages/dexter`, with the root package acting as a thin workspace orchestrator.
-
-- Use Bun for install, test, and typecheck workflows.
-- Keep package-facing docs in [`packages/dexter/README.md`](packages/dexter/README.md).
-- Keep repo-local command implementations in [`meta/commands`](meta/commands), not in the root config file.
+- Use Dexter in your own repo: [packages/dexter/README.md](packages/dexter/README.md)
+- See how this repo uses it: [dexter.config.ts](dexter.config.ts) and [meta/commands](meta/commands)
+- Read the published source: [packages/dexter/src](packages/dexter/src)

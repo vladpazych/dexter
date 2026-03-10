@@ -65,6 +65,21 @@ export type CommandDefinition<
   renderCli?: (result: TResult, ctx: CLIContext) => string
 }
 
+export type CommandBuilder<
+  TArgs extends CommandArgsShape = [],
+  TOptions extends CommandOptionsShape = {},
+  TResult = unknown,
+> = {
+  description: (value: string) => CommandBuilder<TArgs, TOptions, TResult>
+  args: <const TNextArgs extends CommandArgsShape>(...value: TNextArgs) => CommandBuilder<TNextArgs, TOptions, TResult>
+  options: <const TNextOptions extends CommandOptionsShape>(value: TNextOptions) => CommandBuilder<TArgs, TNextOptions, TResult>
+  run: <TNextResult>(
+    handler: (input: CommandInput<TArgs, TOptions>, ctx: CLIContext) => Promise<TNextResult> | TNextResult,
+  ) => CommandBuilder<TArgs, TOptions, TNextResult>
+  renderCli: (handler: (result: TResult, ctx: CLIContext) => string) => CommandBuilder<TArgs, TOptions, TResult>
+  build: () => RuntimeCommandDefinition
+}
+
 type RuntimeCommandInput = {
   args: Record<string, unknown>
   options: Record<string, unknown>
@@ -94,11 +109,25 @@ export function defineConfig(config: CLIConfig): CLIConfig {
   return config
 }
 
+export function args<const TArgs extends CommandArgsShape>(value: TArgs): TArgs {
+  return value
+}
+
+export function command(): CommandBuilder
 export function command<
   const TArgs extends CommandArgsShape = [],
   const TOptions extends CommandOptionsShape = {},
   TResult = unknown,
->(definition: CommandDefinition<TArgs, TOptions, TResult>): RuntimeCommandDefinition {
+>(definition: CommandDefinition<TArgs, TOptions, TResult>): RuntimeCommandDefinition
+export function command<
+  const TArgs extends CommandArgsShape = [],
+  const TOptions extends CommandOptionsShape = {},
+  TResult = unknown,
+>(definition?: CommandDefinition<TArgs, TOptions, TResult>): RuntimeCommandDefinition | CommandBuilder {
+  if (definition === undefined) {
+    return createCommandBuilder()
+  }
+
   return definition as unknown as RuntimeCommandDefinition
 }
 
@@ -115,6 +144,72 @@ type ResolvedCommand = {
 
 type RuntimeMeta = {
   env: ConfigLoadReport[]
+}
+
+type BuilderState = {
+  description?: string
+  args?: CommandArgsShape
+  options?: CommandOptionsShape
+  run?: RuntimeCommandDefinition["run"]
+  renderCli?: RuntimeCommandDefinition["renderCli"]
+}
+
+function createCommandBuilder<
+  TArgs extends CommandArgsShape = [],
+  TOptions extends CommandOptionsShape = {},
+  TResult = unknown,
+>(state: BuilderState = {}): CommandBuilder<TArgs, TOptions, TResult> {
+  return {
+    description(value) {
+      return createCommandBuilder<TArgs, TOptions, TResult>({
+        ...state,
+        description: value,
+      })
+    },
+    args<const TNextArgs extends CommandArgsShape>(...value: TNextArgs) {
+      return createCommandBuilder<TNextArgs, TOptions, TResult>({
+        ...state,
+        args: value,
+      })
+    },
+    options<const TNextOptions extends CommandOptionsShape>(value: TNextOptions) {
+      return createCommandBuilder<TArgs, TNextOptions, TResult>({
+        ...state,
+        options: value,
+      })
+    },
+    run<TNextResult>(
+      handler: (input: CommandInput<TArgs, TOptions>, ctx: CLIContext) => Promise<TNextResult> | TNextResult,
+    ) {
+      return createCommandBuilder<TArgs, TOptions, TNextResult>({
+        ...state,
+        run: handler as RuntimeCommandDefinition["run"],
+      })
+    },
+    renderCli(handler: (result: TResult, ctx: CLIContext) => string) {
+      return createCommandBuilder<TArgs, TOptions, TResult>({
+        ...state,
+        renderCli: handler as RuntimeCommandDefinition["renderCli"],
+      })
+    },
+    build() {
+      if (state.description === undefined) {
+        throw new Error("command builder requires description() before build()")
+      }
+
+      if (state.run === undefined) {
+        throw new Error("command builder requires run() before build()")
+      }
+
+      return {
+        description: state.description,
+        args: state.args,
+        options: state.options,
+        run: state.run,
+        renderCli: state.renderCli,
+      }
+    },
+  }
 }
 
 function outputError(err: unknown): number {
