@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import { pathToFileURL } from "node:url"
 
 import { runDexter } from "../src/cli.ts"
+import { version } from "../src/version.ts"
 
 const localMetaImport = pathToFileURL(join(import.meta.dir, "..", "src", "meta", "index.ts")).href
 const localErrorsImport = pathToFileURL(join(import.meta.dir, "..", "src", "meta", "errors.ts")).href
@@ -440,7 +441,7 @@ describe("runDexter", () => {
     })
 
     expect(result.success).toBe(true)
-    expect(result.stdout.toString().trim()).toBe("0.1.13")
+    expect(result.stdout.toString().trim()).toBe(version)
   })
 
   it("dispatches repo commands through the installed workspace binary", () => {
