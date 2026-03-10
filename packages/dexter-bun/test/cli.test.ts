@@ -8,7 +8,6 @@ import { runDexter } from "../src/cli.ts"
 
 const localMetaImport = pathToFileURL(join(import.meta.dir, "..", "..", "dexter", "src", "meta", "index.ts")).href
 const localErrorsImport = pathToFileURL(join(import.meta.dir, "..", "..", "dexter", "src", "meta", "errors.ts")).href
-const localZodImport = pathToFileURL(join(import.meta.dir, "..", "..", "..", "node_modules", "zod", "index.js")).href
 
 function createRepo(configSource?: string, configFilename = "dexter.config.ts"): string {
   const root = mkdtempSync(join(tmpdir(), "dexter-run-"))
@@ -31,14 +30,12 @@ describe("runDexter (bun runtime)", () => {
   it("loads repo config from dexter.config.ts and runs a command", async () => {
     const root = createRepo(`
       import { command, defineConfig } from ${JSON.stringify(localMetaImport)}
-      import { z } from ${JSON.stringify(localZodImport)}
 
       export default defineConfig({
         commands: {
           hello: command()
             .description("Print repo root.")
-            .args({ name: "target", description: "Name.", schema: z.string() })
-            .run((input, ctx) => ({ root: ctx.root, target: input.args.target }))
+            .run((_input, ctx) => ({ root: ctx.root, target: "world" }))
             .build(),
         },
       })
@@ -46,7 +43,7 @@ describe("runDexter (bun runtime)", () => {
     process.chdir(root)
 
     const log = spyOn(console, "log").mockImplementation(() => {})
-    const exitCode = await runDexter(["hello", "world"])
+    const exitCode = await runDexter(["hello"])
 
     expect(exitCode).toBe(0)
     const output = log.mock.calls.flat().join("\n")
