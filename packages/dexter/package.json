@@ -1,6 +1,6 @@
 {
   "name": "@vladpazych/dexter",
-  "version": "0.1.13",
+  "version": "1.0.0",
   "description": "Repo workflow and CLI primitives for Bun monorepos",
   "license": "MIT",
   "repository": {
