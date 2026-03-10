@@ -1,0 +1,16 @@
+{
+  "name": "@repo/meta-config",
+  "private": true,
+  "type": "module",
+  "files": ["eslint", "tsconfig"],
+  "exports": {
+    "./eslint": "./eslint/index.ts",
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/bundler.json": "./tsconfig/bundler.json"
+  },
+  "dependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.27.0",
+    "@typescript-eslint/parser": "^8.27.0",
+    "eslint-config-prettier": "^10.1.1"
+  }
+}

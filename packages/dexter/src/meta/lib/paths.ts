@@ -3,23 +3,23 @@
  */
 
 import { existsSync, realpathSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 
 /**
- * Find the repo root by looking for CLAUDE.md, starting from CWD.
+ * Find the repo root by asking git for the worktree root.
  * Returns absolute path or throws if not found.
  */
 export function findRepoRoot(): string {
-  let dir = process.cwd()
-
-  while (dir !== dirname(dir)) {
-    if (existsSync(join(dir, "CLAUDE.md"))) {
-      return dir
-    }
-    dir = dirname(dir)
+  const result = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  if (result.success) {
+    const root = result.stdout.toString().trim()
+    if (root) return realpathSync(root)
   }
 
-  throw new Error("error: not in a repo (no CLAUDE.md found)")
+  throw new Error("error: not in a git repository")
 }
 
 /**
@@ -29,7 +29,8 @@ export function findRepoRoot(): string {
 export function isInsideRepo(filePath: string, root: string): boolean {
   try {
     const real = realpathSync(filePath)
-    return real.startsWith(root + "/") || real === root
+    const repoRoot = existsSync(root) ? realpathSync(root) : root
+    return real.startsWith(repoRoot + "/") || real === repoRoot
   } catch {
     return false
   }

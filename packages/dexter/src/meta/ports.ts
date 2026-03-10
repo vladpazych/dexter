@@ -1,7 +1,5 @@
 /**
- * Port interfaces — what control domain needs from the outside world.
- *
- * Adapters implement these. Domain functions accept ControlPorts.
+ * Port interfaces — generic repo tooling dependencies.
  */
 
 export type SpawnResult = { success: boolean; stdout: string; stderr: string }
@@ -15,9 +13,13 @@ export type FsPort = {
   exists(path: string): boolean
   readFile(path: string): string
   writeFile(path: string, content: string): void
+  readBytes(path: string): Uint8Array
+  writeBytes(path: string, content: Uint8Array): void
   readDir(path: string): Array<{ name: string; isDirectory: boolean }>
   unlink(path: string): void
+  rmdir(path: string): void
   mkdir(path: string): void
+  rename(from: string, to: string): void
 }
 
 export type ProcessHandle = {
@@ -39,12 +41,11 @@ export type GlobPort = {
   match(pattern: string, candidates: string[]): string[]
 }
 
-export type ControlPorts = {
+export type RepoPorts = {
   git: GitPort
   fs: FsPort
   process: ProcessPort
   glob: GlobPort
   tmpdir: () => string
-  homedir: () => string
   root: string
 }

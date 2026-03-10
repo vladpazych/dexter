@@ -1,23 +1,30 @@
 /**
- * Workspace discovery — reads package.json workspaces globs and builds Package list.
+ * Workspace discovery — reads package.json workspaces globs and builds package metadata.
  */
 
 import { basename, join, relative } from "node:path"
 
-import type { ControlPorts } from "../ports.ts"
-import type { Package } from "../types.ts"
+import type { RepoPorts } from "../ports.ts"
+
+export type WorkspacePackage = {
+  name: string
+  shortName: string
+  dir: string
+  relDir: string
+  scripts: Record<string, string>
+}
 
 /**
  * Discover all workspace packages from root package.json.
  * Supports `prefix/*` globs (e.g. "apps/*", "lib/*") and bare directories (e.g. "meta").
  */
-export function discoverPackages(ports: ControlPorts): Package[] {
+export function discoverPackages(ports: RepoPorts): WorkspacePackage[] {
   const rootPkg = JSON.parse(ports.fs.readFile(join(ports.root, "package.json"))) as {
     workspaces?: string[]
   }
 
   const globs = rootPkg.workspaces ?? []
-  const packages: Package[] = []
+  const packages: WorkspacePackage[] = []
 
   for (const glob of globs) {
     if (glob.endsWith("/*")) {
@@ -46,7 +53,7 @@ export function discoverPackages(ports: ControlPorts): Package[] {
   return packages.sort((a, b) => a.relDir.localeCompare(b.relDir))
 }
 
-function readPackage(ports: ControlPorts, dir: string): Package | null {
+function readPackage(ports: RepoPorts, dir: string): WorkspacePackage | null {
   try {
     const pkg = JSON.parse(ports.fs.readFile(join(dir, "package.json"))) as {
       name?: string
@@ -64,15 +71,15 @@ function readPackage(ports: ControlPorts, dir: string): Package | null {
   }
 }
 
-export function filterByScope(packages: Package[], scope: string): Package[] {
+export function filterByScope(packages: WorkspacePackage[], scope: string): WorkspacePackage[] {
   return packages.filter((p) => p.relDir.startsWith(scope))
 }
 
-export function filterByScript(packages: Package[], script: string): Package[] {
+export function filterByScript(packages: WorkspacePackage[], script: string): WorkspacePackage[] {
   return packages.filter((p) => script in p.scripts)
 }
 
-export function filterByFiles(packages: Package[], files: string[], root: string): Package[] {
+export function filterByFiles(packages: WorkspacePackage[], files: string[], root: string): WorkspacePackage[] {
   const relFiles = files.map((f) => (f.startsWith("/") ? relative(root, f) : f))
   return packages.filter((pkg) => relFiles.some((f) => f.startsWith(pkg.relDir + "/")))
 }

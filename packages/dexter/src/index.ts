@@ -1,13 +1,13 @@
 /**
- * @vladpazych/dexter — agentic development toolkit.
+ * @vladpazych/dexter — self-describing repo command runtime and tooling helpers.
  *
  * Subpath exports:
- *   dexter/meta     — CLI factory, hook framework, domain commands
- *   dexter/output   — polymorphic structured output (block, field, render)
+ *   dexter/cli      — self-describing repo command runtime and helpers
  *   dexter/env      — env file loading
  *   dexter/pipe     — pipe utilities
+ *   dexter/skills   — remote skill sync primitives
+ *   dexter/spec     — config-driven spec file resolution
  *   dexter/terminal — terminal helpers
- *   dexter/claude   — .claude folder management
  */
 
 export { version } from "./version.ts"

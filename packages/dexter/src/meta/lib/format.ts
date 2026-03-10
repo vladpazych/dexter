@@ -1,13 +1,13 @@
 /**
  * Format flag parsing — extracts output mode from CLI args.
  *
- * Supports `--format cli|json|xml|md` and `--json` shorthand.
+ * Supports `--format cli|json`, `--format=cli|json`, and `--json`.
  * Format flags must appear before `--` separator.
  */
 
-import type { OutputMode } from "../../output/types.ts"
+export type OutputMode = "cli" | "json"
 
-const VALID_MODES = new Set<OutputMode>(["cli", "json", "xml", "md"])
+const VALID_MODES = new Set<OutputMode>(["cli", "json"])
 
 export type ParsedFormat = {
   mode: OutputMode
@@ -31,13 +31,12 @@ export function parseFormat(args: string[]): ParsedFormat {
         mode = "json"
         continue
       }
-      if (args[i] === "--xml") {
-        mode = "xml"
-        continue
-      }
-      if (args[i] === "--md") {
-        mode = "md"
-        continue
+      if (args[i]?.startsWith("--format=")) {
+        const candidate = args[i]!.slice("--format=".length) as OutputMode
+        if (VALID_MODES.has(candidate)) {
+          mode = candidate
+          continue
+        }
       }
       if (args[i] === "--format" && i + 1 < flagRegion) {
         const candidate = args[i + 1] as OutputMode

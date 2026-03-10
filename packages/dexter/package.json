@@ -1,7 +1,7 @@
 {
   "name": "@vladpazych/dexter",
   "version": "0.1.13",
-  "description": "Agentic development toolkit — output rendering, env config, CLI framework for Claude Code hooks",
+  "description": "Repo workflow and CLI primitives for Bun monorepos",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -11,23 +11,16 @@
   "type": "module",
   "files": [
     "src",
-    "bin",
-    ".claude-plugin",
-    "hooks",
-    "skills"
+    "bin"
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./meta": "./src/meta/index.ts",
-    "./output": "./src/output/index.ts",
+    "./cli": "./src/meta/index.ts",
     "./env": "./src/env/index.ts",
     "./pipe": "./src/pipe/index.ts",
-    "./terminal": "./src/terminal/index.ts",
-    "./claude": "./src/claude/index.ts",
-    "./config/eslint": "./src/config/eslint.js",
-    "./config/tsconfig/base.json": "./src/config/tsconfig/base.json",
-    "./config/tsconfig/node.json": "./src/config/tsconfig/node.json",
-    "./config/tsconfig/react.json": "./src/config/tsconfig/react.json"
+    "./skills": "./src/skills/index.ts",
+    "./spec": "./src/spec/index.ts",
+    "./terminal": "./src/terminal/index.ts"
   },
   "bin": {
     "dexter": "./bin/dexter"

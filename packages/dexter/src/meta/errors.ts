@@ -1,19 +1,19 @@
 /**
- * Domain error — typed error with machine-readable code and human-readable hints.
+ * Generic dexter error — typed code plus optional human hints.
  */
 
-export class ControlError extends Error {
+export class DexterError extends Error {
   readonly code: string
   readonly hints: string[]
 
   constructor(code: string, message: string, hints: string[] = []) {
     super(message)
-    this.name = "ControlError"
+    this.name = "DexterError"
     this.code = code
     this.hints = hints
   }
 }
 
-export function isControlError(err: unknown): err is ControlError {
-  return err instanceof ControlError
+export function isDexterError(err: unknown): err is DexterError {
+  return err instanceof DexterError
 }

@@ -6,6 +6,7 @@
  * Metadata is attached via Symbol for printConfig() to read.
  */
 
+import { loadEnv as loadEnvFiles } from "./loader.ts"
 import { validateBoolean, validateEnum, validateNumber, validatePort, validateString, validateUrl } from "./validate.ts"
 
 // ============================================================================
@@ -76,6 +77,24 @@ export type ConfigMeta = {
   fields: FieldMeta[]
 }
 
+export type ConfigFieldReport = {
+  path: string
+  env: string
+  source: string
+  displayValue: string
+  sensitive: boolean
+}
+
+export type ConfigLoadReport = {
+  name: string
+  fields: ConfigFieldReport[]
+}
+
+export type ResolveConfigOptions = {
+  env?: Record<string, string | undefined>
+  rootDir?: string
+}
+
 // ============================================================================
 // ERROR
 // ============================================================================
@@ -93,6 +112,9 @@ export class ConfigError extends Error {
 // ============================================================================
 // RUNTIME
 // ============================================================================
+
+const MASK = "••••"
+const UNSET = "—"
 
 function isField(value: unknown): value is FieldDef {
   return (
@@ -120,14 +142,88 @@ function coerce(raw: string, type: EnvType, values?: readonly string[]): unknown
   }
 }
 
-export function defineConfig<const S extends Schema>(schema: S): ConfigOutput<S>
-export function defineConfig<const S extends Schema>(name: string, schema: S): ConfigOutput<S>
-export function defineConfig<const S extends Schema>(nameOrSchema: string | S, maybeSchema?: S): ConfigOutput<S> {
-  const name = typeof nameOrSchema === "string" ? nameOrSchema : undefined
-  const schema = typeof nameOrSchema === "string" ? maybeSchema! : nameOrSchema
+function resolveNameAndSchema<const S extends Schema>(nameOrSchema: string | S, maybeSchema?: S): {
+  name?: string
+  schema: S
+} {
+  if (typeof nameOrSchema === "string") {
+    if (maybeSchema === undefined) {
+      throw new Error("schema is required when name is provided")
+    }
 
+    return {
+      name: nameOrSchema,
+      schema: maybeSchema,
+    }
+  }
+
+  return {
+    name: undefined,
+    schema: nameOrSchema,
+  }
+}
+
+function formatDisplayValue(value: unknown, sensitive: boolean): string {
+  if (value === undefined || value === null) return UNSET
+  if (sensitive) return MASK
+  return String(value)
+}
+
+function createFieldMeta(path: string, def: FieldDef): FieldMeta {
+  return {
+    path,
+    env: def.env,
+    sensitive: def.sensitive ?? false,
+    type: def.type ?? "string",
+    values: def.values,
+    required: def.required ?? false,
+    hasDefault: "default" in def,
+  }
+}
+
+function createFieldReport(path: string, field: FieldMeta, source: string, value: unknown): ConfigFieldReport {
+  return {
+    path,
+    env: field.env,
+    source,
+    displayValue: formatDisplayValue(value, field.sensitive),
+    sensitive: field.sensitive,
+  }
+}
+
+function attachConfigMeta(config: Record<string, unknown>, name: string | undefined, fields: FieldMeta[]): void {
+  Object.defineProperty(config, CONFIG_META, {
+    value: { name, fields } satisfies ConfigMeta,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  })
+}
+
+function resolveConfigInternal<const S extends Schema>(
+  name: string | undefined,
+  schema: S,
+  options: ResolveConfigOptions,
+): { config: ConfigOutput<S>; report: ConfigLoadReport } {
   const errors: string[] = []
   const fields: FieldMeta[] = []
+  const reportFields: ConfigFieldReport[] = []
+  const fileEnv = options.rootDir ? loadEnvFiles(options.rootDir) : { env: {}, sources: {} }
+  const runtimeEnv = options.env ?? process.env
+
+  function lookupValue(envName: string): { raw: string | undefined; source: string | undefined } {
+    const runtimeValue = runtimeEnv[envName]
+    if (runtimeValue !== undefined && runtimeValue !== "") {
+      return { raw: runtimeValue, source: "process" }
+    }
+
+    const fileValue = fileEnv.env[envName]
+    if (fileValue !== undefined && fileValue !== "") {
+      return { raw: fileValue, source: fileEnv.sources[envName] }
+    }
+
+    return { raw: undefined, source: undefined }
+  }
 
   function walk(obj: Record<string, unknown>, path: string[]): Record<string, unknown> {
     const result: Record<string, unknown> = {}
@@ -135,35 +231,39 @@ export function defineConfig<const S extends Schema>(nameOrSchema: string | S, m
     for (const [key, def] of Object.entries(obj)) {
       if (isField(def)) {
         const fieldPath = [...path, key].join(".")
-        const type: EnvType = (def.type as EnvType) ?? "string"
+        const field = createFieldMeta(fieldPath, def)
 
-        fields.push({
-          path: fieldPath,
-          env: def.env,
-          sensitive: def.sensitive ?? false,
-          type,
-          values: def.values,
-          required: def.required ?? false,
-          hasDefault: "default" in def,
-        })
+        fields.push(field)
 
-        const raw = process.env[def.env]
+        const { raw, source } = lookupValue(def.env)
 
-        if (raw === undefined || raw === "") {
-          if (def.required) {
+        if (raw === undefined) {
+          if (field.required) {
             errors.push(`${def.env}: required but not set`)
-          } else if ("default" in def) {
-            result[key] = def.default
-          } else {
             result[key] = undefined
+            reportFields.push(createFieldReport(fieldPath, field, "unset", undefined))
+            continue
           }
+
+          if (field.hasDefault) {
+            result[key] = def.default
+            reportFields.push(createFieldReport(fieldPath, field, "default", def.default))
+            continue
+          }
+
+          result[key] = undefined
+          reportFields.push(createFieldReport(fieldPath, field, "unset", undefined))
           continue
         }
 
         try {
-          result[key] = coerce(raw, type, def.values)
+          const value = coerce(raw, field.type, def.values)
+          result[key] = value
+          reportFields.push(createFieldReport(fieldPath, field, source ?? "process", value))
         } catch (msg) {
           errors.push(`${def.env}: ${msg}`)
+          result[key] = undefined
+          reportFields.push(createFieldReport(fieldPath, field, source ?? "process", raw))
         }
       } else {
         result[key] = walk(def as Record<string, unknown>, [...path, key])
@@ -173,18 +273,47 @@ export function defineConfig<const S extends Schema>(nameOrSchema: string | S, m
     return result
   }
 
-  const config = walk(schema as unknown as Record<string, unknown>, [])
+  const config = walk(schema as Record<string, unknown>, []) as ConfigOutput<S> & Record<string, unknown>
 
   if (errors.length > 0) {
     throw new ConfigError(errors)
   }
 
-  Object.defineProperty(config, CONFIG_META, {
-    value: { name, fields } satisfies ConfigMeta,
-    enumerable: false,
-    configurable: false,
-    writable: false,
-  })
+  attachConfigMeta(config, name, fields)
 
-  return config as ConfigOutput<S>
+  return {
+    config,
+    report: {
+      name: name ?? "env",
+      fields: reportFields,
+    },
+  }
+}
+
+export function defineConfig<const S extends Schema>(schema: S): ConfigOutput<S>
+export function defineConfig<const S extends Schema>(name: string, schema: S): ConfigOutput<S>
+export function defineConfig<const S extends Schema>(nameOrSchema: string | S, maybeSchema?: S): ConfigOutput<S> {
+  const resolved = resolveNameAndSchema(nameOrSchema, maybeSchema)
+  return resolveConfigInternal(resolved.name, resolved.schema, { env: process.env }).config
+}
+
+export function resolveConfig<const S extends Schema>(schema: S, options?: ResolveConfigOptions): {
+  config: ConfigOutput<S>
+  report: ConfigLoadReport
+}
+export function resolveConfig<const S extends Schema>(name: string, schema: S, options?: ResolveConfigOptions): {
+  config: ConfigOutput<S>
+  report: ConfigLoadReport
+}
+export function resolveConfig<const S extends Schema>(
+  nameOrSchema: string | S,
+  schemaOrOptions?: S | ResolveConfigOptions,
+  maybeOptions?: ResolveConfigOptions,
+): { config: ConfigOutput<S>; report: ConfigLoadReport } {
+  if (typeof nameOrSchema === "string") {
+    const resolved = resolveNameAndSchema(nameOrSchema, schemaOrOptions as S | undefined)
+    return resolveConfigInternal(resolved.name, resolved.schema, maybeOptions ?? {})
+  }
+
+  return resolveConfigInternal(undefined, nameOrSchema, (schemaOrOptions ?? {}) as ResolveConfigOptions)
 }

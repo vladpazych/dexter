@@ -1,62 +1,162 @@
 # @vladpazych/dexter
 
-Agentic development toolkit for Bun monorepos. Powers Claude Code hooks, quality-gated commits, and structured CLI output across projects.
+Runtime for self-describing repo commands in Bun monorepos.
+
+`dexter` is for repos that want a real internal tooling surface:
+
+- `dexter.config.ts` as the composition root
+- `dexter <command...>` as the runtime contract
+- typed command definitions with built-in help and validation
+- repo-aware execution context and helpers
+
+It is not just an argument parser.
 
 ## Install
 
 ```sh
-bun add @vladpazych/dexter
+bun add @vladpazych/dexter zod
 ```
 
-## Subpath exports
+## What It Is
 
-| Import                          | Purpose                                           |
-| :------------------------------ | :------------------------------------------------ |
-| `@vladpazych/dexter/meta`      | `createCLI` factory, hook protocol, domain commands |
-| `@vladpazych/dexter/output`    | Polymorphic structured output (CLI, JSON, XML, MD)  |
-| `@vladpazych/dexter/env`       | Env file loading, typed config, validation          |
-| `@vladpazych/dexter/pipe`      | Subprocess piping, log parsing, formatting          |
-| `@vladpazych/dexter/terminal`  | ANSI colors with NO_COLOR support                   |
+- A runtime for repo-local commands
+- A typed command definition API
+- A clean way to build repo-local CLIs with shared repo context
+- A small Bun-native toolkit with repo/process/fs/git/workspace helpers
 
-## Quick start
+## What It Is Not
 
-Create `meta/index.ts` in your repo:
+- Not a replacement for `commander` on its own
+- Not a task runner
+- Not a general application framework
+- Not an agent-governance or spec-enforcement system
+- Not a multi-renderer output framework
+
+`commander` handles parsing. `dexter` handles repo-local command authoring and execution.
+
+## Quick Start
+
+Create `dexter.config.ts` in your repo root:
 
 ```ts
-import { createCLI } from "@vladpazych/dexter/meta"
+import { command, defineConfig } from "@vladpazych/dexter/cli"
+import { z } from "zod"
 
-await createCLI({
-  // Custom commands and hook extensions go here
-}).run()
+export default defineConfig({
+  commands: {
+    db: {
+      description: "Database utilities.",
+      commands: {
+        greet: command({
+          description: "Print a greeting for a named target.",
+          args: [
+            {
+              name: "target",
+              description: "Who to greet.",
+              schema: z.string(),
+            },
+          ] as const,
+          options: {
+            loud: {
+              description: "Uppercase the greeting.",
+              schema: z.boolean().optional(),
+            },
+          },
+          run(input, ctx) {
+            const prefix = input.options.loud ? "HELLO" : "hello"
+            return {
+              message: `${prefix} ${input.args.target}`,
+              root: ctx.root,
+            }
+          },
+          renderCli(result) {
+            return `${result.message} (${result.root})`
+          },
+        }),
+      },
+    },
+  },
+})
 ```
 
-Enable the dexter plugin in `.claude/settings.json` — it wires all Claude Code hooks automatically:
+Supported root config filenames:
 
-```json
-{
-  "enabledPlugins": {
-    "dexter@dexter-marketplace": true
-  }
-}
+- `dexter.config.ts`
+- `dexter.config.js`
+- `dexter.config.mts`
+- `dexter.config.mjs`
+
+Keep `meta/` for ordinary implementation files such as `meta/commands/*.ts`. It is not a magic entrypoint.
+
+In this repo, `meta/config/` and `meta/commands/` are private workspace packages used by the root `dexter.config.ts`.
+
+Run it with the installed runtime:
+
+```sh
+dexter help
+dexter db --help
+dexter db greet world
+dexter db greet world --loud
+dexter db greet world --json
 ```
 
-## Built-in commands
+## Command Model
 
-```
-commit "message" file1 file2   Quality-gated atomic commit
-rules <scope>                  CLAUDE.md cascade for scopes
-diff <scope>                   Git status + diff
-commits <scope>                Recent commit history
-lint [scope]                   ESLint across workspace
-typecheck [scope]              TypeScript checking
-test [scope]                   Run tests
-blame <file>                   Structured git blame
-pickaxe <pattern>              Find commits by pattern
-bisect <test-cmd>              Binary search for bad commit
-eval                           Sandboxed TypeScript REPL
-packages                       List workspace packages
-```
+Each leaf command declares:
+
+- `description`
+- positional `args`
+- named `options`
+- `run(input, ctx)`
+- optional `renderCli(result, ctx)`
+
+Namespaces declare:
+
+- `description`
+- nested `commands`
+
+The runtime handles:
+
+- `dexter help`
+- `dexter help <command...>`
+- `dexter <command...> --help`
+- argv parsing
+- Zod validation
+- CLI or JSON output
+
+Commands also receive `ctx.loadEnv()` for explicit command-scoped env loading from `process.env`, `.env`, and `.env.local`.
+Loaded values are reflected in command output, and sensitive fields are masked.
+
+## CLI Output
+
+`dexter` keeps output simple:
+
+- default mode is human-readable CLI output
+- `--json` prints the raw command result as JSON
+
+If `renderCli()` is present, it controls CLI output.
+Otherwise strings print directly and objects fall back to pretty JSON.
+
+## Runtime Env Loading
+
+Dexter runtime bootstrap is intentionally narrow:
+
+- before loading `dexter.config.*`, dexter reads `.env` and `.env.local`
+- only variables with the `META_` prefix are applied implicitly
+- normal command env like `COOLIFY_SECRET` should be loaded explicitly inside commands via `ctx.loadEnv()`
+
+## Subpath Exports
+
+| Import                         | Purpose                                  |
+| :----------------------------- | :--------------------------------------- |
+| `@vladpazych/dexter/cli`      | Command runtime, repo helpers, runtime types |
+| `@vladpazych/dexter/env`      | Env file loading and validation helpers  |
+| `@vladpazych/dexter/pipe`     | Subprocess and pipe utilities            |
+| `@vladpazych/dexter/skills`   | GitHub-backed skill sync primitives      |
+| `@vladpazych/dexter/spec`     | Config-driven spec file resolution       |
+| `@vladpazych/dexter/terminal` | ANSI color helpers                       |
 
 ## Requirements
 
-- [Bun](https://bun.sh) runtime — exports point to TypeScript source, no build step
+- [Bun](https://bun.sh)
+- TypeScript source exports, no build step

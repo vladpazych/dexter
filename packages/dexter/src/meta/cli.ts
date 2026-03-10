@@ -1,475 +1,588 @@
 /**
- * createCLI — the extension API for consumer repos.
- *
- * Consumer repos import this factory and compose their own CLI
- * with custom commands and hook extensions on top of dexter's core.
+ * createCLI — self-describing repo command runtime.
  */
 
-import { render } from "../output/index.ts"
-import type { Node, OutputMode } from "../output/types.ts"
+import { z, type ZodTypeAny } from "zod"
 
-import { isControlError } from "./errors.ts"
+import { resolveConfig as resolveEnvConfig, type ConfigFieldReport, type ConfigLoadReport, type ConfigOutput, type Schema } from "../env/define.ts"
+import { createRepoPorts } from "./adapters/index.ts"
+import { DexterError, isDexterError } from "./errors.ts"
+import { parseFormat, type OutputMode } from "./lib/format.ts"
 import { findRepoRoot } from "./lib/paths.ts"
-import { parseFormat } from "./lib/format.ts"
-import {
-  presentQuery,
-  presentGit,
-  presentCommit,
-  presentEval,
-  presentPackages,
-  presentSetup,
-  presentTranscripts,
-  presentError,
-} from "./lib/present.ts"
-import { createControlPorts } from "./adapters/index.ts"
-import { createControlService, type ControlService } from "./domain/service.ts"
+import type { RepoPorts } from "./ports.ts"
 
-// Composable hook internals
-import { checkPreBash, CORE_DENY_PATTERNS, type DenyPattern } from "./hooks/on-pre-bash.ts"
-import { collectPostWriteContext } from "./hooks/on-post-write.ts"
-import { collectPostReadContext } from "./hooks/on-post-read.ts"
-import { collectSessionStartContext } from "./hooks/on-session-start.ts"
-
-import { readJsonStdin, type HookInput } from "./lib/stdin.ts"
-
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-export type HookContext = {
-  root: string
-  service: ControlService
-  mode: OutputMode
-  /** Render a Node tree to string in the active output mode. */
-  render: (node: Node) => string
+type LoadEnvFn = {
+  <const S extends Schema>(schema: S): ConfigOutput<S>
+  <const S extends Schema>(name: string, schema: S): ConfigOutput<S>
 }
 
-export type HookOutput = {
-  additionalContext?: string
-} | void
+export type CLIContext = {
+  root: string
+  ports: RepoPorts
+  mode: OutputMode
+  loadEnv: LoadEnvFn
+}
 
-export type HookHandler = (input: HookInput | null) => HookOutput | Promise<HookOutput>
+export type CommandArg<TSchema extends ZodTypeAny = ZodTypeAny> = {
+  name: string
+  description: string
+  schema: TSchema
+}
+
+export type CommandOption<TSchema extends ZodTypeAny = ZodTypeAny> = {
+  description: string
+  schema: TSchema
+}
+
+type CommandArgsShape = readonly CommandArg[]
+type CommandOptionsShape = Record<string, CommandOption>
+
+type InferArgs<TArgs extends CommandArgsShape> = {
+  [TArg in TArgs[number] as TArg["name"]]: z.infer<TArg["schema"]>
+}
+
+type InferOptions<TOptions extends CommandOptionsShape> = {
+  [TName in keyof TOptions]: z.infer<TOptions[TName]["schema"]>
+}
+
+export type CommandInput<
+  TArgs extends CommandArgsShape = [],
+  TOptions extends CommandOptionsShape = {},
+> = {
+  args: InferArgs<TArgs>
+  options: InferOptions<TOptions>
+}
+
+export type CommandDefinition<
+  TArgs extends CommandArgsShape = [],
+  TOptions extends CommandOptionsShape = {},
+  TResult = unknown,
+> = {
+  description: string
+  args?: TArgs
+  options?: TOptions
+  run: (input: CommandInput<TArgs, TOptions>, ctx: CLIContext) => Promise<TResult> | TResult
+  renderCli?: (result: TResult, ctx: CLIContext) => string
+}
+
+type RuntimeCommandInput = {
+  args: Record<string, unknown>
+  options: Record<string, unknown>
+}
+
+type RuntimeCommandDefinition = {
+  description: string
+  args?: CommandArgsShape
+  options?: CommandOptionsShape
+  run: (input: RuntimeCommandInput, ctx: CLIContext) => Promise<unknown> | unknown
+  renderCli?: (result: unknown, ctx: CLIContext) => string
+}
+
+export type AnyCommand = RuntimeCommandDefinition
+export type CommandNamespace = {
+  description: string
+  commands: Record<string, CommandNode>
+}
+export type CommandNode = AnyCommand | CommandNamespace
 
 export type CLIConfig = {
-  commands?: Record<string, (args: string[], ctx: HookContext) => Promise<void> | void>
-  hooks?: {
-    /** Additional deny patterns merged with core patterns */
-    "pre-bash"?: { deny?: DenyPattern[] }
-    /** Called after core post-read. Return additional context to append. */
-    "post-read"?: HookHandler
-    /** Called after core post-write. Return additional context to append. */
-    "post-write"?: HookHandler
-    /** Called after core session-start. Return additional context to append. */
-    "session-start"?: HookHandler
-    /** Called after Bash tool execution. */
-    "post-bash"?: HookHandler
-    /** Called when agent is about to stop. */
-    "stop"?: HookHandler
-    /** Called on user prompt submit. */
-    "prompt-submit"?: HookHandler
-    /** Called on notification. */
-    "notification"?: HookHandler
-    /** Called before context compaction. */
-    "pre-compact"?: HookHandler
-    /** Called on tool failure. */
-    "tool-failure"?: HookHandler
-    /** Called when a subagent starts. */
-    "subagent-start"?: HookHandler
-    /** Called when a subagent stops. */
-    "subagent-stop"?: HookHandler
-    /** Called when session ends. */
-    "session-end"?: HookHandler
-    /** Called on permission request. */
-    "permission-request"?: HookHandler
-  }
+  description?: string
+  commands?: Record<string, CommandNode>
 }
 
-// Re-export for consumers defining deny patterns
-export type { DenyPattern }
-
-// ---------------------------------------------------------------------------
-// Extension hooks — no core logic, delegate to consumer callback
-// ---------------------------------------------------------------------------
-
-const EXTENSION_HOOKS: Record<string, { key: string; event: string }> = {
-  "on-post-bash": { key: "post-bash", event: "PostToolUse" },
-  "on-stop": { key: "stop", event: "Stop" },
-  "on-prompt-submit": { key: "prompt-submit", event: "PromptSubmit" },
-  "on-notification": { key: "notification", event: "Notification" },
-  "on-pre-compact": { key: "pre-compact", event: "PreCompact" },
-  "on-tool-failure": { key: "tool-failure", event: "ToolError" },
-  "on-subagent-start": { key: "subagent-start", event: "SubagentStart" },
-  "on-subagent-stop": { key: "subagent-stop", event: "SubagentStop" },
-  "on-session-end": { key: "session-end", event: "SessionEnd" },
-  "on-permission-request": { key: "permission-request", event: "PermissionRequest" },
+export function defineConfig(config: CLIConfig): CLIConfig {
+  return config
 }
 
-// ---------------------------------------------------------------------------
-// Output helpers
-// ---------------------------------------------------------------------------
+export function command<
+  const TArgs extends CommandArgsShape = [],
+  const TOptions extends CommandOptionsShape = {},
+  TResult = unknown,
+>(definition: CommandDefinition<TArgs, TOptions, TResult>): RuntimeCommandDefinition {
+  return definition as unknown as RuntimeCommandDefinition
+}
 
-function outputError(err: unknown, mode: OutputMode): void {
-  if (isControlError(err)) {
-    console.log(render(presentError(err), mode))
+type NormalizedOption = {
+  key: string
+  definition: CommandOption
+}
+
+type ResolvedCommand = {
+  path: string[]
+  node: CommandNode | undefined
+  rest: string[]
+}
+
+type RuntimeMeta = {
+  env: ConfigLoadReport[]
+}
+
+function outputError(err: unknown): number {
+  if (isDexterError(err)) {
+    console.error(`error: ${err.message}`)
+    for (const hint of err.hints) {
+      console.error(`hint: ${hint}`)
+    }
   } else {
     const message = err instanceof Error ? err.message : String(err)
     console.error(message)
   }
-  process.exit(1)
+  return 1
 }
 
-// ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
+function isOptionalSchema(schema: ZodTypeAny): boolean {
+  return schema.safeParse(undefined).success
+}
+
+function isBooleanSchema(schema: ZodTypeAny): boolean {
+  return schema.safeParse(true).success && schema.safeParse(false).success
+}
+
+function toFlagName(name: string): string {
+  return name.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)
+}
+
+function buildOptionIndex(options: CommandOptionsShape): Map<string, NormalizedOption> {
+  const index = new Map<string, NormalizedOption>()
+
+  for (const [key, definition] of Object.entries(options)) {
+    index.set(key, { key, definition })
+    index.set(toFlagName(key), { key, definition })
+  }
+
+  return index
+}
+
+function formatIssue(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => {
+      const path = issue.path.length > 0 ? `${issue.path.join(".")}: ` : ""
+      return `${path}${issue.message}`
+    })
+    .join("; ")
+}
+
+function parseBooleanValue(raw: string): boolean | undefined {
+  if (raw === "true") return true
+  if (raw === "false") return false
+  return undefined
+}
+
+function isNamespaceNode(node: CommandNode | undefined): node is CommandNamespace {
+  return typeof node === "object" && node !== null && "commands" in node && !("run" in node)
+}
+
+function resolveCommand(tokens: string[], commands: Record<string, CommandNode> = {}): ResolvedCommand {
+  const path: string[] = []
+  let entries = commands
+  let node: CommandNode | undefined
+
+  for (const token of tokens) {
+    const next = entries[token]
+    if (!next) {
+      break
+    }
+
+    path.push(token)
+    node = next
+
+    if (isNamespaceNode(next)) {
+      entries = next.commands
+      continue
+    }
+
+    return {
+      path,
+      node: next,
+      rest: tokens.slice(path.length),
+    }
+  }
+
+  return {
+    path,
+    node,
+    rest: tokens.slice(path.length),
+  }
+}
+
+function formatPath(path: string[]): string {
+  return path.join(" ")
+}
+
+function createLoadEnv(root: string, reports: ConfigLoadReport[]): LoadEnvFn {
+  const options = {
+    rootDir: root,
+    env: process.env,
+  }
+
+  function record<const S extends Schema>(result: {
+    config: ConfigOutput<S>
+    report: ConfigLoadReport
+  }): ConfigOutput<S> {
+    reports.push(result.report)
+    return result.config
+  }
+
+  function loadEnv<const S extends Schema>(schema: S): ConfigOutput<S>
+  function loadEnv<const S extends Schema>(name: string, schema: S): ConfigOutput<S>
+  function loadEnv<const S extends Schema>(nameOrSchema: string | S, maybeSchema?: S): ConfigOutput<S> {
+    if (typeof nameOrSchema === "string") {
+      if (maybeSchema === undefined) {
+        throw new Error("schema is required when name is provided")
+      }
+
+      return record(resolveEnvConfig(nameOrSchema, maybeSchema, options))
+    }
+
+    return record(resolveEnvConfig(nameOrSchema, options))
+  }
+
+  return loadEnv
+}
+
+function formatEnvField(field: ConfigFieldReport, width: number): string {
+  const source = `[${field.source}]`
+  const padding = " ".repeat(Math.max(width - field.env.length + 2, 2))
+  return `    ${field.env}${padding}${field.displayValue} ${source}`
+}
+
+function formatRuntimeMeta(meta: RuntimeMeta): string | undefined {
+  if (meta.env.length === 0) {
+    return undefined
+  }
+
+  const lines = ["Environment:"]
+
+  for (const report of meta.env) {
+    lines.push(`  ${report.name}`)
+    const width = report.fields.reduce((max, field) => Math.max(max, field.env.length), 0)
+    for (const field of report.fields) {
+      lines.push(formatEnvField(field, width))
+    }
+  }
+
+  return lines.join("\n")
+}
+
+function parseCommandInput(commandName: string, definition: AnyCommand, tokens: string[]): RuntimeCommandInput {
+  const argDefs = definition.args ?? []
+  const optionDefs = definition.options ?? {}
+  const optionIndex = buildOptionIndex(optionDefs)
+  const rawOptions = new Map<string, unknown>()
+  const positionals: string[] = []
+  let stopOptions = false
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!
+
+    if (!stopOptions && token === "--") {
+      stopOptions = true
+      continue
+    }
+
+    if (!stopOptions && token.startsWith("--") && token.length > 2) {
+      if (token.startsWith("--no-")) {
+        const normalized = optionIndex.get(token.slice("--no-".length))
+        if (!normalized || !isBooleanSchema(normalized.definition.schema)) {
+          throw new DexterError("unknown-option", `Unknown option: ${token}`)
+        }
+        rawOptions.set(normalized.key, false)
+        continue
+      }
+
+      const eqIndex = token.indexOf("=")
+      const rawName = eqIndex >= 0 ? token.slice(2, eqIndex) : token.slice(2)
+      const normalized = optionIndex.get(rawName)
+      if (!normalized) {
+        throw new DexterError("unknown-option", `Unknown option: --${rawName}`)
+      }
+
+      if (eqIndex >= 0) {
+        const inlineValue = token.slice(eqIndex + 1)
+        const value = isBooleanSchema(normalized.definition.schema)
+          ? (parseBooleanValue(inlineValue) ?? inlineValue)
+          : inlineValue
+        rawOptions.set(normalized.key, value)
+        continue
+      }
+
+      if (isBooleanSchema(normalized.definition.schema)) {
+        rawOptions.set(normalized.key, true)
+        continue
+      }
+
+      const next = tokens[i + 1]
+      if (next === undefined || next === "--" || next.startsWith("--")) {
+        throw new DexterError("missing-option-value", `Missing value for option: --${toFlagName(normalized.key)}`)
+      }
+
+      rawOptions.set(normalized.key, next)
+      i++
+      continue
+    }
+
+    positionals.push(token)
+  }
+
+  if (positionals.length > argDefs.length) {
+    throw new DexterError(
+      "unexpected-argument",
+      `Unexpected argument: ${positionals[argDefs.length]!}`,
+      [`Usage: ${formatUsage(commandName, definition)}`],
+    )
+  }
+
+  const args: Record<string, unknown> = {}
+  for (let index = 0; index < argDefs.length; index++) {
+    const arg = argDefs[index]!
+    const rawValue = positionals[index]
+    const parsed = arg.schema.safeParse(rawValue)
+
+    if (!parsed.success) {
+      if (rawValue === undefined && !isOptionalSchema(arg.schema)) {
+        throw new DexterError(
+          "missing-argument",
+          `Missing required argument: ${arg.name}`,
+          [`Usage: ${formatUsage(commandName, definition)}`],
+        )
+      }
+
+      throw new DexterError(
+        "invalid-argument",
+        `Invalid value for argument '${arg.name}': ${formatIssue(parsed.error)}`,
+      )
+    }
+
+    args[arg.name] = parsed.data
+  }
+
+  const options: Record<string, unknown> = {}
+  for (const [key, option] of Object.entries(optionDefs)) {
+    const rawValue = rawOptions.has(key) ? rawOptions.get(key) : undefined
+    const parsed = option.schema.safeParse(rawValue)
+
+    if (!parsed.success) {
+      if (rawValue === undefined && !isOptionalSchema(option.schema)) {
+        throw new DexterError("missing-option", `Missing required option: --${toFlagName(key)}`)
+      }
+
+      throw new DexterError(
+        "invalid-option",
+        `Invalid value for option '--${toFlagName(key)}': ${formatIssue(parsed.error)}`,
+      )
+    }
+
+    options[key] = parsed.data
+  }
+
+  return { args, options }
+}
+
+function renderResult(result: unknown, definition: AnyCommand, ctx: CLIContext, meta: RuntimeMeta): string | undefined {
+  if (ctx.mode === "json") {
+    if (meta.env.length === 0) {
+      if (result === undefined) return undefined
+      return JSON.stringify(result, null, 2)
+    }
+
+    const payload: Record<string, unknown> = {
+      meta: {
+        env: meta.env,
+      },
+    }
+    if (result !== undefined) {
+      payload.result = result
+    }
+    return JSON.stringify(payload, null, 2)
+  }
+
+  const sections: string[] = []
+  const formattedMeta = formatRuntimeMeta(meta)
+  if (formattedMeta !== undefined) {
+    sections.push(formattedMeta)
+  }
+
+  let renderedResult: string | undefined
+  if (definition.renderCli) {
+    renderedResult = definition.renderCli(result, ctx)
+  } else if (typeof result === "string") {
+    renderedResult = result
+  } else if (result !== undefined) {
+    renderedResult = JSON.stringify(result, null, 2)
+  }
+
+  if (renderedResult !== undefined && renderedResult.length > 0) {
+    sections.push(renderedResult)
+  }
+
+  if (sections.length === 0) {
+    return undefined
+  }
+
+  return sections.join("\n\n")
+}
+
+function printText(text: string | undefined): void {
+  if (text === undefined || text.length === 0) {
+    return
+  }
+  console.log(text)
+}
+
+function formatUsage(commandName: string, definition: AnyCommand): string {
+  const args = (definition.args ?? []).map((arg) =>
+    isOptionalSchema(arg.schema) ? `[${arg.name}]` : `<${arg.name}>`,
+  )
+  const optionDefs = definition.options ?? {}
+  const hasOptions = Object.keys(optionDefs).length > 0
+  const parts = ["dexter", commandName]
+
+  if (hasOptions) {
+    parts.push("[options]")
+  }
+  parts.push(...args)
+
+  return parts.join(" ")
+}
+
+function formatCommandHelp(commandName: string, definition: AnyCommand): string {
+  const lines = [definition.description, "", `Usage: ${formatUsage(commandName, definition)}`]
+  const args = definition.args ?? []
+  const options = definition.options ?? {}
+
+  if (args.length > 0) {
+    lines.push("", "Arguments:")
+    for (const arg of args) {
+      const suffix = isOptionalSchema(arg.schema) ? " (optional)" : ""
+      lines.push(`  ${arg.name}${suffix}  ${arg.description}`)
+    }
+  }
+
+  lines.push("", "Options:")
+  const optionKeys = Object.keys(options).sort()
+  if (optionKeys.length === 0) {
+    lines.push("  (none)")
+  } else {
+    for (const key of optionKeys) {
+      const option = options[key]!
+      const flag = `--${toFlagName(key)}`
+      const label = isBooleanSchema(option.schema) ? flag : `${flag} <value>`
+      const suffix = isOptionalSchema(option.schema) ? " (optional)" : ""
+      lines.push(`  ${label}${suffix}  ${option.description}`)
+    }
+  }
+
+  lines.push("  -h, --help  Show command help")
+  lines.push("  --json      Print JSON output")
+  lines.push("  --format <cli|json>  Select output mode")
+
+  return lines.join("\n")
+}
+
+function formatNamespaceHelp(path: string[], definition: CommandNamespace): string {
+  const commandName = formatPath(path)
+  const lines = [definition.description, "", `Usage: dexter ${commandName} <command>`, "", "Commands:"]
+  const entries = Object.entries(definition.commands).sort(([left], [right]) => left.localeCompare(right))
+
+  if (entries.length === 0) {
+    lines.push("  (none)")
+  } else {
+    for (const [name, child] of entries) {
+      lines.push(`  ${name}  ${child.description}`)
+    }
+  }
+
+  lines.push("", "Options:")
+  lines.push("  -h, --help  Show command help")
+
+  return lines.join("\n")
+}
+
+function formatGlobalHelp(config: CLIConfig): string {
+  const title = config.description ?? "dexter meta"
+  const lines = [title, "", "Usage: dexter <command...>", "", "Commands:"]
+  const entries = Object.entries(config.commands ?? {}).sort(([left], [right]) => left.localeCompare(right))
+
+  if (entries.length === 0) {
+    lines.push("  (none)")
+  } else {
+    for (const [name, definition] of entries) {
+      lines.push(`  ${name}  ${definition.description}`)
+    }
+  }
+
+  lines.push("", "Global flags:")
+  lines.push("  --json")
+  lines.push("  --format <cli|json>")
+  lines.push("  -h, --help")
+
+  return lines.join("\n")
+}
 
 export function createCLI(config: CLIConfig = {}) {
   return {
-    async run(): Promise<void> {
-      const [, , cmd, ...rawArgs] = process.argv
+    async run(argv: string[] = process.argv.slice(2)): Promise<number> {
+      const [cmd, ...rawArgs] = argv
 
-      // Hook commands — composable dispatch
-      if (cmd?.startsWith("on-")) {
-        // Emergency brake — bypass all hooks when .claude/hooks-disabled exists
-        try {
-          const root = findRepoRoot()
-          if (await Bun.file(`${root}/.claude/hooks-disabled`).exists()) {
-            process.exit(0)
-          }
-        } catch {
-          // No repo root — continue normally
+      if (cmd === undefined || cmd === "help" || cmd === "--help" || cmd === "-h") {
+        const { rest } = parseFormat(rawArgs)
+        if (rest.length === 0) {
+          printText(formatGlobalHelp(config))
+          return 0
         }
 
-        switch (cmd) {
-          case "on-session-start": {
-            const input = await readJsonStdin<HookInput>()
-            const sections = await collectSessionStartContext()
-
-            const ext = config.hooks?.["session-start"]
-            if (ext) {
-              const result = await ext(input)
-              if (result?.additionalContext) {
-                sections.push(result.additionalContext)
-              }
-            }
-
-            if (sections.length > 0) {
-              console.log(
-                JSON.stringify({
-                  hookSpecificOutput: {
-                    hookEventName: "SessionStart",
-                    additionalContext: sections.join("\n"),
-                  },
-                }),
-              )
-            }
-            process.exit(0)
-          }
-
-          case "on-pre-bash": {
-            const input = await readJsonStdin<HookInput>()
-            const patterns = [...CORE_DENY_PATTERNS, ...(config.hooks?.["pre-bash"]?.deny ?? [])]
-            const reason = await checkPreBash(input, patterns)
-
-            if (reason) {
-              console.log(
-                JSON.stringify({
-                  hookSpecificOutput: {
-                    hookEventName: "PreToolUse",
-                    permissionDecision: "deny",
-                    permissionDecisionReason: reason,
-                  },
-                }),
-              )
-            }
-            process.exit(0)
-          }
-
-          case "on-post-write": {
-            const input = await readJsonStdin<HookInput>()
-            const sections = await collectPostWriteContext(input)
-
-            const ext = config.hooks?.["post-write"]
-            if (ext) {
-              const result = await ext(input)
-              if (result?.additionalContext) {
-                sections.push(result.additionalContext)
-              }
-            }
-
-            if (sections.length > 0) {
-              console.log(
-                JSON.stringify({
-                  hookSpecificOutput: {
-                    hookEventName: "PostToolUse",
-                    additionalContext: sections.join("\n"),
-                  },
-                }),
-              )
-            }
-            process.exit(0)
-          }
-
-          case "on-post-read": {
-            const input = await readJsonStdin<HookInput>()
-            const sections = await collectPostReadContext(input)
-
-            const ext = config.hooks?.["post-read"]
-            if (ext) {
-              const result = await ext(input)
-              if (result?.additionalContext) {
-                sections.push(result.additionalContext)
-              }
-            }
-
-            if (sections.length > 0) {
-              console.log(
-                JSON.stringify({
-                  hookSpecificOutput: {
-                    hookEventName: "PostToolUse",
-                    additionalContext: sections.join("\n") + "\n",
-                  },
-                }),
-              )
-            }
-            process.exit(0)
-          }
-
-          default: {
-            // Extension hooks — no core logic, delegate to consumer
-            const hookDef = EXTENSION_HOOKS[cmd]
-            if (hookDef) {
-              const input = await readJsonStdin<HookInput>()
-              const ext = config.hooks?.[hookDef.key as keyof NonNullable<CLIConfig["hooks"]>]
-
-              if (typeof ext === "function") {
-                const result = await (ext as HookHandler)(input)
-                if (result?.additionalContext) {
-                  console.log(
-                    JSON.stringify({
-                      hookSpecificOutput: {
-                        hookEventName: hookDef.event,
-                        additionalContext: result.additionalContext,
-                      },
-                    }),
-                  )
-                }
-              }
-
-              process.exit(0)
-            }
-
-            // Unknown hook — silent exit
-            process.exit(0)
-          }
+        const resolved = resolveCommand(rest, config.commands)
+        const fullPath = formatPath([...resolved.path, ...resolved.rest])
+        if (resolved.node === undefined || resolved.rest.length > 0) {
+          console.error(`Unknown command: ${fullPath}`)
+          return 1
         }
+
+        if (isNamespaceNode(resolved.node)) {
+          printText(formatNamespaceHelp(resolved.path, resolved.node))
+          return 0
+        }
+
+        printText(formatCommandHelp(formatPath(resolved.path), resolved.node))
+        return 0
       }
 
-      // Everything below needs repo root + service
-      let root: string
-      try {
-        root = findRepoRoot()
-      } catch (err) {
-        console.error(err instanceof Error ? err.message : String(err))
-        process.exit(1)
+      const resolved = resolveCommand(argv, config.commands)
+      const invokedPath = formatPath([...resolved.path, ...resolved.rest])
+
+      if (resolved.node === undefined) {
+        console.error(`Unknown command: ${cmd}`)
+        return 1
       }
 
-      const ports = createControlPorts(root)
-      const service = createControlService(ports)
-
-      // Parse format flags
-      const { mode, rest: args } = parseFormat(rawArgs)
-      const ctx: HookContext = { root, service, mode, render: (node) => render(node, mode) }
-
       try {
-        // Custom commands first (override built-in)
-        if (cmd && config.commands?.[cmd]) {
-          await config.commands[cmd](args, ctx)
-          return
+        const { mode, rest } = parseFormat(resolved.rest)
+
+        if (isNamespaceNode(resolved.node)) {
+          if (rest.length === 0 || rest.includes("--help") || rest.includes("-h")) {
+            printText(formatNamespaceHelp(resolved.path, resolved.node))
+            return 0
+          }
+
+          console.error(`Unknown command: ${invokedPath}`)
+          return 1
         }
 
-        // Built-in domain commands
-        switch (cmd) {
-          case "commit": {
-            const [message, ...files] = args
-            if (!message) {
-              console.error('Usage: commit "message" file1 file2 ...')
-              process.exit(1)
-            }
-            const result = await service.commit({ message, files })
-            console.log(render(presentCommit(result), mode), mode)
-            break
-          }
-
-          case "rules": {
-            const scopes = args.length > 0 ? args : ["."]
-            const result = service.rules(scopes)
-            console.log(render(presentQuery(result), mode), mode)
-            break
-          }
-
-          case "diff": {
-            const scopes = args.length > 0 ? args : ["."]
-            const result = service.diff(scopes)
-            console.log(render(presentQuery(result), mode), mode)
-            break
-          }
-
-          case "commits": {
-            const scopes = args.length > 0 ? args : ["."]
-            const result = service.commits(scopes)
-            console.log(render(presentQuery(result), mode), mode)
-            break
-          }
-
-          case "lint": {
-            const changed = args.includes("--changed")
-            const scopes = args.filter((a) => a !== "--changed")
-            const result = await service.lint(scopes, { changed })
-            console.log(render(presentQuery(result), mode), mode)
-            if (result.what === "lint" && result.data.errorCount > 0) process.exit(1)
-            break
-          }
-
-          case "typecheck": {
-            const result = await service.typecheck(args)
-            console.log(render(presentQuery(result), mode), mode)
-            if (result.what === "typecheck" && result.data.errorCount > 0) process.exit(1)
-            break
-          }
-
-          case "test": {
-            const result = await service.test(args)
-            console.log(render(presentQuery(result), mode), mode)
-            if (result.what === "test" && result.data.errorCount > 0) process.exit(1)
-            break
-          }
-
-          case "blame": {
-            const file = args[0]
-            if (!file) {
-              console.error("Usage: blame <file> [startLine:endLine]")
-              process.exit(1)
-            }
-            let lines: [number, number] | undefined
-            if (args[1]) {
-              const parts = args[1].split(":")
-              if (parts.length === 2) {
-                lines = [parseInt(parts[0]!, 10), parseInt(parts[1]!, 10)]
-              }
-            }
-            const result = service.blame(file, lines)
-            console.log(render(presentGit(result), mode), mode)
-            break
-          }
-
-          case "pickaxe": {
-            const pattern = args[0]
-            if (!pattern) {
-              console.error("Usage: pickaxe <pattern> [--regex] [scopes...]")
-              process.exit(1)
-            }
-            const regex = args.includes("--regex")
-            const scopes = args.slice(1).filter((a) => a !== "--regex")
-            const result = service.pickaxe(pattern, { regex, scopes: scopes.length > 0 ? scopes : undefined })
-            console.log(render(presentGit(result), mode), mode)
-            break
-          }
-
-          case "bisect": {
-            const testCmd = args[0]
-            const goodIdx = args.indexOf("--good")
-            const badIdx = args.indexOf("--bad")
-            const good = goodIdx >= 0 ? args[goodIdx + 1] : undefined
-            const bad = badIdx >= 0 ? args[badIdx + 1] : undefined
-            if (!testCmd || !good) {
-              console.error("Usage: bisect <test-cmd> --good <ref> [--bad <ref>]")
-              process.exit(1)
-            }
-            const result = await service.bisect(testCmd, good, bad)
-            console.log(render(presentGit(result), mode), mode)
-            break
-          }
-
-          case "eval": {
-            const code = args.join(" ")
-            const result = await service.eval({ code })
-            console.log(render(presentEval(result), mode), mode)
-            if (!result.ok) process.exit(1)
-            break
-          }
-
-          case "setup": {
-            const result = service.setup()
-            console.log(render(presentSetup(result), mode), mode)
-            break
-          }
-
-          case "transcripts": {
-            const skillIdx = args.indexOf("--skill")
-            const minutesIdx = args.indexOf("--minutes")
-            const skill = skillIdx >= 0 ? args[skillIdx + 1] : undefined
-            const minutes = minutesIdx >= 0 ? parseInt(args[minutesIdx + 1]!, 10) : undefined
-            const result = service.transcripts({ skill, minutes })
-            console.log(render(presentTranscripts(result), mode), mode)
-            break
-          }
-
-          case "packages": {
-            const packages = service.discoverPackages()
-            console.log(render(presentPackages(packages), mode), mode)
-            break
-          }
-
-          case "format": {
-            // Prettier formatting
-            const scopes = args.length > 0 ? args : ["."]
-            const formatResult = await service.lint(scopes) // HACK: reuses lint, should be separate
-            console.log(render(presentQuery(formatResult), mode), mode)
-            break
-          }
-
-          case "--help":
-          case "-h":
-          case "help":
-          case undefined: {
-            const commands = [
-              "commit   — quality-gated atomic commit",
-              "rules    — CLAUDE.md cascade for scopes",
-              "diff     — git status + diff for scopes",
-              "commits  — recent commit history",
-              "lint     — ESLint across workspace",
-              "typecheck — TypeScript checking",
-              "test     — run tests",
-              "blame    — structured git blame",
-              "pickaxe  — find commits by pattern",
-              "bisect   — binary search for bad commit",
-              "eval     — sandboxed TypeScript REPL",
-              "setup    — configure .claude/settings",
-              "transcripts — list subagent transcripts",
-              "packages — list workspace packages",
-            ]
-
-            if (config.commands) {
-              for (const name of Object.keys(config.commands)) {
-                commands.push(`${name}   — (custom)`)
-              }
-            }
-
-            console.log(`dexter meta — agentic development toolkit\n`)
-            console.log(`Commands:`)
-            for (const c of commands) {
-              console.log(`  ${c}`)
-            }
-            console.log(`\nFlags: --format cli|json|xml|md  --json  --xml  --md`)
-            break
-          }
-
-          default:
-            console.error(`Unknown command: ${cmd}`)
-            process.exit(1)
+        if (rest.includes("--help") || rest.includes("-h")) {
+          printText(formatCommandHelp(formatPath(resolved.path), resolved.node))
+          return 0
         }
+
+        const root = findRepoRoot()
+        const ports = createRepoPorts(root)
+        const meta: RuntimeMeta = { env: [] }
+        const ctx: CLIContext = { root, ports, mode, loadEnv: createLoadEnv(root, meta.env) }
+        const input = parseCommandInput(formatPath(resolved.path), resolved.node, rest)
+        const result = await resolved.node.run(input, ctx)
+        printText(renderResult(result, resolved.node, ctx, meta))
+        return 0
       } catch (err) {
-        outputError(err, mode)
+        return outputError(err)
       }
     },
   }

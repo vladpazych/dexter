@@ -13,6 +13,22 @@ function workspacePorts(root = "/repo") {
   return mockPorts({ fs: createWorkspaceFs(root), root })
 }
 
+function createFsStub(overrides: Partial<ReturnType<typeof createWorkspaceFs>>) {
+  return {
+    exists: () => true,
+    readFile: () => "{}",
+    writeFile: () => {},
+    readBytes: () => new Uint8Array(),
+    writeBytes: () => {},
+    readDir: () => [],
+    unlink: () => {},
+    rmdir: () => {},
+    mkdir: () => {},
+    rename: () => {},
+    ...overrides,
+  }
+}
+
 describe("discoverPackages", () => {
   it("discovers packages from workspaces globs", () => {
     const ports = workspacePorts()
@@ -47,17 +63,13 @@ describe("discoverPackages", () => {
 
   it("skips unsupported glob patterns like packages/**", () => {
     const ports = mockPorts({
-      fs: {
+      fs: createFsStub({
         exists: () => true,
         readFile: (path: string) => {
           if (path === "/repo/package.json") return JSON.stringify({ workspaces: ["packages/**"] })
           return "{}"
         },
-        writeFile: () => {},
-        readDir: () => [],
-        unlink: () => {},
-        mkdir: () => {},
-      },
+      }),
     })
 
     const packages = discoverPackages(ports)
@@ -66,7 +78,7 @@ describe("discoverPackages", () => {
 
   it("discovers bare directory workspace entries", () => {
     const ports = mockPorts({
-      fs: {
+      fs: createFsStub({
         exists: () => true,
         readFile: (path: string) => {
           if (path === "/repo/package.json") return JSON.stringify({ workspaces: ["apps/*", "meta"] })
@@ -81,9 +93,7 @@ describe("discoverPackages", () => {
           if (path === "/repo/apps") return [{ name: "web", isDirectory: true }]
           throw new Error("ENOENT")
         },
-        unlink: () => {},
-        mkdir: () => {},
-      },
+      }),
     })
 
     const packages = discoverPackages(ports)
@@ -97,7 +107,7 @@ describe("discoverPackages", () => {
 
   it("skips directories without package.json", () => {
     const ports = mockPorts({
-      fs: {
+      fs: createFsStub({
         exists: () => true,
         readFile: (path: string) => {
           if (path === "/repo/package.json") return JSON.stringify({ workspaces: ["apps/*"] })
@@ -113,9 +123,7 @@ describe("discoverPackages", () => {
             ]
           return []
         },
-        unlink: () => {},
-        mkdir: () => {},
-      },
+      }),
     })
 
     const packages = discoverPackages(ports)
@@ -125,7 +133,7 @@ describe("discoverPackages", () => {
 
   it("skips non-directory entries", () => {
     const ports = mockPorts({
-      fs: {
+      fs: createFsStub({
         exists: () => true,
         readFile: (path: string) => {
           if (path === "/repo/package.json") return JSON.stringify({ workspaces: ["apps/*"] })
@@ -141,9 +149,7 @@ describe("discoverPackages", () => {
             ]
           return []
         },
-        unlink: () => {},
-        mkdir: () => {},
-      },
+      }),
     })
 
     const packages = discoverPackages(ports)
@@ -152,20 +158,17 @@ describe("discoverPackages", () => {
 
   it("skips missing prefix directories", () => {
     const ports = mockPorts({
-      fs: {
+      fs: createFsStub({
         exists: () => true,
         readFile: (path: string) => {
           if (path === "/repo/package.json") return JSON.stringify({ workspaces: ["apps/*", "missing/*"] })
           return "{}"
         },
-        writeFile: () => {},
         readDir: (path: string) => {
           if (path === "/repo/apps") return []
           throw new Error("ENOENT")
         },
-        unlink: () => {},
-        mkdir: () => {},
-      },
+      }),
     })
 
     const packages = discoverPackages(ports)
@@ -174,21 +177,18 @@ describe("discoverPackages", () => {
 
   it("falls back to directory name when package.json has no name", () => {
     const ports = mockPorts({
-      fs: {
+      fs: createFsStub({
         exists: () => true,
         readFile: (path: string) => {
           if (path === "/repo/package.json") return JSON.stringify({ workspaces: ["apps/*"] })
           if (path === "/repo/apps/unnamed/package.json") return JSON.stringify({ scripts: {} })
           return "{}"
         },
-        writeFile: () => {},
         readDir: (path: string) => {
           if (path === "/repo/apps") return [{ name: "unnamed", isDirectory: true }]
           return []
         },
-        unlink: () => {},
-        mkdir: () => {},
-      },
+      }),
     })
 
     const packages = discoverPackages(ports)
@@ -198,14 +198,10 @@ describe("discoverPackages", () => {
 
   it("returns empty array when no workspaces defined", () => {
     const ports = mockPorts({
-      fs: {
+      fs: createFsStub({
         exists: () => true,
         readFile: () => JSON.stringify({}),
-        writeFile: () => {},
-        readDir: () => [],
-        unlink: () => {},
-        mkdir: () => {},
-      },
+      }),
     })
 
     const packages = discoverPackages(ports)

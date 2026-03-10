@@ -1,13 +1,21 @@
 {
-  "name": "dexter-workspace",
+  "name": "@repo/root",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "meta/config",
+    "meta/commands"
   ],
   "devDependencies": {
-    "@vladpazych/dexter": "workspace:*"
+    "@repo/meta-commands": "workspace:*",
+    "@repo/meta-config": "workspace:*",
+    "@types/bun": "^1",
+    "@vladpazych/dexter": "workspace:*",
+    "eslint": "^9.22.0",
+    "jiti": "^2.4.2"
   },
   "scripts": {
-    "bump": "bun meta/index.ts release"
+    "bump": "dexter release",
+    "lint": "eslint ."
   }
 }

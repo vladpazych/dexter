@@ -1,11 +1,11 @@
 /**
- * Control Test Mocks
+ * Repo tooling test mocks.
  *
- * Mock ports for testing domain logic without I/O.
+ * Mock ports for testing without I/O.
  */
 
-import type { ControlPorts, FsPort, ProcessHandle } from "../../src/meta/ports.ts"
-import type { Package } from "../../src/meta/types.ts"
+import type { WorkspacePackage } from "../../src/meta/domain/workspace.ts"
+import type { FsPort, ProcessHandle, RepoPorts } from "../../src/meta/ports.ts"
 
 export function mockProcessHandle(exitCode: number = 0): ProcessHandle {
   const listeners: Record<string, ((line: string) => void)[]> = {}
@@ -17,11 +17,10 @@ export function mockProcessHandle(exitCode: number = 0): ProcessHandle {
   }
 }
 
-export function mockPorts(overrides: Partial<ControlPorts> = {}): ControlPorts {
+export function mockPorts(overrides: Partial<RepoPorts> = {}): RepoPorts {
   return {
     root: "/repo",
     tmpdir: () => "/tmp",
-    homedir: () => "/home",
     git: {
       run: () => ({ success: true, stdout: "", stderr: "" }),
       checkIgnore: () => false,
@@ -30,9 +29,13 @@ export function mockPorts(overrides: Partial<ControlPorts> = {}): ControlPorts {
       exists: () => true,
       readFile: () => "{}",
       writeFile: () => {},
+      readBytes: () => new Uint8Array(),
+      writeBytes: () => {},
       readDir: () => [],
       unlink: () => {},
+      rmdir: () => {},
       mkdir: () => {},
+      rename: () => {},
     },
     process: {
       spawn: () => mockProcessHandle(0),
@@ -45,7 +48,7 @@ export function mockPorts(overrides: Partial<ControlPorts> = {}): ControlPorts {
   }
 }
 
-export function mockPackage(overrides: Partial<Package> = {}): Package {
+export function mockPackage(overrides: Partial<WorkspacePackage> = {}): WorkspacePackage {
   return {
     name: "@test/pkg",
     shortName: "pkg",
@@ -96,11 +99,18 @@ export function createWorkspaceFs(root = "/repo"): FsPort {
       return files[path]!
     },
     writeFile: () => {},
+    readBytes: (path: string) => {
+      if (!(path in files)) throw new Error(`ENOENT: ${path}`)
+      return new TextEncoder().encode(files[path]!)
+    },
+    writeBytes: () => {},
     readDir: (path: string) => {
       if (!(path in dirs)) throw new Error(`ENOENT: ${path}`)
       return dirs[path]!
     },
     unlink: () => {},
+    rmdir: () => {},
     mkdir: () => {},
+    rename: () => {},
   }
 }

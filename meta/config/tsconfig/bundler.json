@@ -1,0 +1,11 @@
+{
+  "extends": "@repo/meta-config/tsconfig/base.json",
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "lib": ["ES2024"]
+  }
+}
