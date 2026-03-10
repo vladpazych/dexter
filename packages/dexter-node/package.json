@@ -17,7 +17,7 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "dexter": "./bin/dexter"
+    "dexter": "bin/dexter"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
