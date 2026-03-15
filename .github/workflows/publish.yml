@@ -28,27 +28,14 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: bun run --cwd packages/dexter typecheck
-      - run: bun run --cwd packages/dexter-bun typecheck
-      - run: bun run --cwd packages/dexter-node typecheck
-      - run: bun test packages/dexter/
-      - run: bun test packages/dexter-bun/
-      - run: bun test packages/dexter-node/
+      - run: bun run format:check
+      - run: bun run typecheck
+      - run: bun test
 
-      # OIDC trusted publishing requires npm >=11.5.1 → node 24
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Publish bun runtime to npm
+      - name: Publish package to npm
         run: npm publish --provenance --access public
-        working-directory: packages/dexter-bun
-
-      - name: Publish node runtime to npm
-        run: npm publish --provenance --access public
-        working-directory: packages/dexter-node
-
-      - name: Publish core to npm
-        run: npm publish --provenance --access public
-        working-directory: packages/dexter

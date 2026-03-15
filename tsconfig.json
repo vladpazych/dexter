@@ -1,7 +1,24 @@
 {
-  "extends": "@repo/meta-config/tsconfig/bundler.json",
   "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noFallthroughCasesInSwitch": true,
+    "allowImportingTsExtensions": true,
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "lib": ["ES2024"],
     "types": ["bun"]
   },
-  "include": ["eslint.config.ts", "meta/**/*.ts", "packages/dexter/src/**/*.ts", "packages/dexter/test/**/*.ts", "scripts/**/*.ts"]
+  "include": [
+    "eslint.config.ts",
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "scripts/**/*.ts"
+  ]
 }

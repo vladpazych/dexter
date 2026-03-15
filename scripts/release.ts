@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url"
 
 const VALID_BUMPS = new Set(["patch", "minor", "major"])
-const PACKAGE_PATH = new URL("../packages/dexter/package.json", import.meta.url)
+const PACKAGE_PATH = new URL("../package.json", import.meta.url)
 const ROOT_DIR = fileURLToPath(new URL("..", import.meta.url))
 
 function fail(message: string): never {
@@ -28,14 +28,20 @@ if (bump === undefined || !VALID_BUMPS.has(bump)) {
   fail("usage: bun run scripts/release.ts <patch|minor|major>")
 }
 
-const pkg = JSON.parse(await Bun.file(PACKAGE_PATH).text()) as { version: string }
+const pkg = JSON.parse(await Bun.file(PACKAGE_PATH).text()) as {
+  version: string
+}
 const [major, minor, patch] = pkg.version.split(".").map(Number)
 if (major === undefined || minor === undefined || patch === undefined) {
   fail(`invalid version: ${pkg.version}`)
 }
 
 const nextVersion =
-  bump === "major" ? `${major + 1}.0.0` : bump === "minor" ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`
+  bump === "major"
+    ? `${major + 1}.0.0`
+    : bump === "minor"
+      ? `${major}.${minor + 1}.0`
+      : `${major}.${minor}.${patch + 1}`
 
 pkg.version = nextVersion
 await Bun.write(PACKAGE_PATH, JSON.stringify(pkg, null, 2) + "\n")

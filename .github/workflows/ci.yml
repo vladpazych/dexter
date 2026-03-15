@@ -14,21 +14,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - run: bun install --frozen-lockfile
-
-      - name: Typecheck core
-        run: bun run --cwd packages/dexter typecheck
-
-      - name: Typecheck bun runtime
-        run: bun run --cwd packages/dexter-bun typecheck
-
-      - name: Typecheck node runtime
-        run: bun run --cwd packages/dexter-node typecheck
-
-      - name: Test core
-        run: bun test packages/dexter/
-
-      - name: Test bun runtime
-        run: bun test packages/dexter-bun/
-
-      - name: Test node runtime
-        run: bun test packages/dexter-node/
+      - run: bun run format:check
+      - run: bun run typecheck
+      - run: bun test

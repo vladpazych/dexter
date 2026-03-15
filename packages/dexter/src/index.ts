@@ -1,5 +1,0 @@
-export { env } from "./env/index.ts"
-export { files } from "./files/index.ts"
-export { pipe } from "./pipe/index.ts"
-export { terminal } from "./terminal/index.ts"
-export { version } from "./version.ts"
