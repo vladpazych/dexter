@@ -13,7 +13,6 @@ Release @vladpazych/dexter: bump version, curate release notes, push to trigger 
 1. Read the bump level from `$ARGUMENTS`. Validate it is `patch`, `minor`, or `major`. If missing, ask.
 
 2. Run release preflight:
-
    - `git status --short`
    - `git describe --tags --abbrev=0`
    - read `package.json` version

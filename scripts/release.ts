@@ -191,7 +191,9 @@ async function main(): Promise<void> {
     baseVersion = resolveReleaseBaseVersion(pkg.version, latestTag)
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "failed to resolve release version"
+      error instanceof Error
+        ? error.message
+        : "failed to resolve release version"
     fail(message)
   }
 

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import {
-  bumpVersion,
-  resolveReleaseBaseVersion,
-} from "../scripts/release.ts"
+import { bumpVersion, resolveReleaseBaseVersion } from "../scripts/release.ts"
 
 describe("release script", () => {
   it("bumps semantic versions from the release baseline", () => {
