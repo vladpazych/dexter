@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["dexter.config.ts", "eslint.config.ts", "meta/**/*.ts", "packages/dexter/src/**/*.ts", "packages/dexter/test/**/*.ts"]
+  "include": ["eslint.config.ts", "meta/**/*.ts", "packages/dexter/src/**/*.ts", "packages/dexter/test/**/*.ts", "scripts/**/*.ts"]
 }

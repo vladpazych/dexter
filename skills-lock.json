@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "readme-md": {
+      "source": "git@github.com:vladpazych/awesome-skills.git",
+      "sourceType": "git",
+      "computedHash": "67e69e420166456862e82fd3ec284b5c7829c143231fb67119070692b6290c83"
+    }
+  }
+}

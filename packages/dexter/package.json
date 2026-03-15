@@ -1,7 +1,7 @@
 {
   "name": "@vladpazych/dexter",
   "version": "1.1.1",
-  "description": "Repo workflow and CLI primitives for self-describing repos",
+  "description": "Tiny primitives for repo-level tooling",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,13 +13,7 @@
     "src"
   ],
   "exports": {
-    ".": "./src/index.ts",
-    "./cli": "./src/meta/index.ts",
-    "./env": "./src/env/index.ts",
-    "./pipe": "./src/pipe/index.ts",
-    "./skills": "./src/skills/index.ts",
-    "./spec": "./src/spec/index.ts",
-    "./terminal": "./src/terminal/index.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -31,6 +25,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/bun": "^1"
+    "@types/bun": "^1",
+    "typescript": "^5.9.2"
   }
 }

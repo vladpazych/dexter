@@ -9,7 +9,6 @@ import { type ChildProcess, spawn as nodeSpawn } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { createInterface } from "node:readline"
-import { setColorEnabled } from "../terminal/colors.ts"
 import { formatFile, formatTerminal } from "./format.ts"
 import { parse } from "./parse.ts"
 import type { PipedEntry } from "./types.ts"
@@ -79,9 +78,6 @@ export type PipeHandle = {
  * - Writes truncated colored output to terminal
  */
 export function pipe(options: PipeOptions): PipeHandle {
-  // Enable colors for dexter output (override NO_COLOR from parent shell)
-  setColorEnabled(true)
-
   const cwd = options.cwd ?? process.cwd()
   const monorepoRoot = findMonorepoRoot(cwd)
 
@@ -127,8 +123,6 @@ export function pipe(options: PipeOptions): PipeHandle {
       COLUMNS: String(terminalWidth),
       // Enable colors in child processes (vite, etc.)
       FORCE_COLOR: "1",
-      // Enable colors in dexter's output
-      DEXTER_COLOR: "1",
       ...options.env,
       // Signal to apps: output JSON for parsing, don't write own files
       LOG_FORMAT: "json",
@@ -154,7 +148,7 @@ export function pipe(options: PipeOptions): PipeHandle {
     appendFileSync(logFilePath, `${fileLine}\n`)
 
     // Write to terminal (truncated, colored)
-    const terminalLine = formatTerminal(entry, { width: terminalWidth })
+    const terminalLine = formatTerminal(entry, { width: terminalWidth, color: true })
     process.stdout.write(`${terminalLine}\n`)
 
     // Callback

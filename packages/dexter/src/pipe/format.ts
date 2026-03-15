@@ -2,7 +2,7 @@
  * Log formatting for terminal and file output.
  */
 
-import { bold, dim, gray, red, reset, yellow } from "../terminal/colors.ts"
+import { createColors, stripAnsi } from "../terminal/colors.ts"
 import type { LogLevel, PipedEntry } from "./types.ts"
 
 /**
@@ -33,15 +33,6 @@ const LEVEL_LABELS: Record<LogLevel, string> = {
   warn: "W",
   error: "E",
   fatal: "F",
-}
-
-const LEVEL_COLORS: Record<LogLevel, string> = {
-  trace: gray,
-  debug: dim,
-  info: "",
-  warn: yellow,
-  error: red,
-  fatal: bold + red,
 }
 
 /** Fields to exclude from key=value output */
@@ -81,15 +72,8 @@ export type FormatTerminalOptions = {
   width?: number
   /** Max width per field value */
   maxValueLen?: number
-}
-
-/**
- * Strip ANSI escape codes for length calculation.
- */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI pattern
-const ANSI_REGEX = /\x1b\[[0-9;]*m/g
-function stripAnsiLocal(str: string): string {
-  return str.replace(ANSI_REGEX, "")
+  /** Force color on or off */
+  color?: boolean
 }
 
 /**
@@ -102,10 +86,10 @@ function stripAnsiLocal(str: string): string {
  * - file:line is clickable in most terminals
  */
 export function formatTerminal(entry: PipedEntry, options: FormatTerminalOptions = {}): string {
-  const { width = getTerminalWidth(), maxValueLen = 20 } = options
+  const { width = getTerminalWidth(), maxValueLen = 20, color } = options
+  const colors = createColors({ color })
 
   const label = LEVEL_LABELS[entry.level]
-  const levelColor = LEVEL_COLORS[entry.level]
   const prefix = formatPrefix(entry.logFile, entry.lineNumber)
   const kv = formatFields(entry.fields, maxValueLen)
 
@@ -113,7 +97,7 @@ export function formatTerminal(entry: PipedEntry, options: FormatTerminalOptions
   let kvPart = kv ? ` ${kv}` : ""
 
   // Calculate visible length (without ANSI codes)
-  const messagePlain = stripAnsiLocal(message)
+  const messagePlain = stripAnsi(message)
 
   // Fixed parts: "L " + prefix + " "
   const fixedWidth = 2 + prefix.length + 1
@@ -134,17 +118,15 @@ export function formatTerminal(entry: PipedEntry, options: FormatTerminalOptions
           const truncLen = available - 2
           if (truncLen > 0 && truncLen < messagePlain.length) {
             // Simple truncation for messages with ANSI - preserve some content
-            message = `${message.slice(0, truncLen + (message.length - messagePlain.length))}${reset}…`
+            message = `${message.slice(0, truncLen + (message.length - messagePlain.length))}…`
           }
         }
       }
     }
   }
 
-  // Color only the level character, preserve message colors
-  // Dim the file:line prefix for reduced visual noise
-  const coloredLabel = levelColor ? `${levelColor}${label}${reset}` : label
-  const dimmedPrefix = `${dim}${prefix}${reset}`
+  const coloredLabel = formatLevel(label, entry.level, colors)
+  const dimmedPrefix = colors.dim(prefix)
   return `${coloredLabel} ${dimmedPrefix} ${message}${kvPart}`
 }
 
@@ -160,8 +142,29 @@ export function formatFile(entry: PipedEntry): string {
   const label = LEVEL_LABELS[entry.level]
   const time = new Date(entry.timestamp).toISOString().slice(11, 19)
   const kv = formatFields(entry.fields, 1000) // No truncation
-  const message = stripAnsiLocal(entry.message) // Strip ANSI for file
+  const message = stripAnsi(entry.message)
 
   const kvPart = kv ? ` ${kv}` : ""
   return `${label} ${time} ${message}${kvPart}`
+}
+
+function formatLevel(
+  label: string,
+  level: LogLevel,
+  colors: ReturnType<typeof createColors>,
+): string {
+  switch (level) {
+    case "trace":
+      return colors.gray(label)
+    case "debug":
+      return colors.dim(label)
+    case "warn":
+      return colors.yellow(label)
+    case "error":
+      return colors.red(label)
+    case "fatal":
+      return colors.bold(colors.red(label))
+    case "info":
+      return label
+  }
 }

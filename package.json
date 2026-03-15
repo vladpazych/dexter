@@ -3,20 +3,15 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "meta/config",
-    "meta/commands"
+    "meta/config"
   ],
   "devDependencies": {
-    "@repo/meta-commands": "workspace:*",
     "@repo/meta-config": "workspace:*",
     "@types/bun": "^1",
-    "@vladpazych/dexter": "workspace:*",
-    "@vladpazych/dexter-bun": "workspace:*",
-    "eslint": "^9.22.0",
-    "jiti": "^2.4.2"
+    "eslint": "^9.22.0"
   },
   "scripts": {
-    "bump": "dexter release",
+    "bump": "bun run scripts/release.ts",
     "lint": "eslint ."
   }
 }

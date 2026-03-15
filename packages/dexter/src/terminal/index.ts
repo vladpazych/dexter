@@ -1,16 +1,9 @@
-export {
-  blue,
-  bold,
-  c,
-  cyan,
-  dim,
-  gray,
-  green,
-  magenta,
-  red,
-  reset,
-  setColorEnabled,
-  stripAnsi,
-  wrap,
-  yellow,
-} from "./colors.ts"
+import { createTerminal } from "./colors.ts"
+
+export const terminal = {
+  colors: createTerminal().colors,
+  stripAnsi: createTerminal().stripAnsi,
+  with(options: { color?: boolean }) {
+    return createTerminal(options)
+  },
+}

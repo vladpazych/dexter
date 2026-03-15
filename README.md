@@ -1,55 +1,34 @@
 # Dexter
 
-Typed repo commands for LLM-driven codebases.
+Tiny primitives for repo-level tooling.
 
 ```ts
-import { command, defineConfig } from "@vladpazych/dexter/cli"
-import { z } from "zod"
-
-const greet = command()
-  .description("Print a greeting.")
-  .args({
-    name: "target",
-    description: "Who to greet.",
-    schema: z.string(),
-  })
-  .run(({ args }) => `hello ${args.target}`)
-  .build()
-
-export default defineConfig({
-  commands: {
-    greet,
-    syncSkills,
-    resolveSpecs,
-    typecheckChanged,
-    testChanged,
-    publishPackage,
-    envDoctor,
-  },
-})
+import { env, files, pipe, terminal } from "@vladpazych/dexter"
 ```
 
-```sh
-dexter help
-dexter greet world
-dexter sync-skills
-dexter resolve-specs packages/dexter/src
+Dexter no longer owns a CLI runtime. Consumer repos write normal local scripts under `scripts/` and expose them through `package.json`.
+
+## What Stays
+
+- Typed env loading and inspection
+- Process spawning with structured log piping
+- File collection around a target path
+- Small terminal color and ANSI helpers
+
+## This Repo
+
+This repo now uses a normal local script for release work:
+
+```json
+{
+  "scripts": {
+    "bump": "bun run scripts/release.ts"
+  }
+}
 ```
 
-## What It Is
+Start here:
 
-- A typed internal CLI for repos that humans and agents both operate
-- A way to turn repo workflows into explicit commands instead of scripts and prompt lore
-- A small set of primitives for env loading, subprocess work, spec resolution, and skill sync
-
-## Who It’s For
-
-- LLM-heavy repos that need discoverable, inspectable workflows
-- Monorepos with too much logic hiding in `package.json`, shell scripts, or tribal knowledge
-- Teams that want agents to use the same command surface as humans
-
-## Start Here
-
-- Use Dexter in your own repo: [packages/dexter/README.md](packages/dexter/README.md)
-- See how this repo uses it: [dexter.config.ts](dexter.config.ts) and [meta/commands](meta/commands)
-- Read the published source: [packages/dexter/src](packages/dexter/src)
+- Package docs: [packages/dexter/README.md](packages/dexter/README.md)
+- Local scripts: [scripts](scripts)
+- Published source: [packages/dexter/src](packages/dexter/src)

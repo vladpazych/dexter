@@ -1,12 +1,12 @@
 /**
  * Config printing with sensitive value masking.
  *
- * Reads metadata attached by defineConfig() via CONFIG_META symbol.
+ * Reads metadata attached by env loading via ENV_META.
  * Nested schema keys become section headers in the output.
  */
 
-import { c } from "../terminal/colors.ts"
-import { CONFIG_META, type ConfigMeta, type FieldMeta } from "./define.ts"
+import { createColors } from "../terminal/colors.ts"
+import { ENV_META, type EnvMeta, type FieldMeta } from "./define.ts"
 
 const MASK = "••••"
 const UNSET = "—"
@@ -14,16 +14,18 @@ const BOX_TOP = "┌"
 const BOX_MID = "│"
 const BOX_BOT = "└"
 
-function getMeta(config: unknown): ConfigMeta | undefined {
-  if (typeof config === "object" && config !== null && CONFIG_META in config) {
-    return (config as Record<symbol, unknown>)[CONFIG_META] as ConfigMeta
+const colors = createColors()
+
+function getMeta(config: unknown): EnvMeta | undefined {
+  if (typeof config === "object" && config !== null && ENV_META in config) {
+    return (config as Record<symbol, unknown>)[ENV_META] as EnvMeta
   }
   return undefined
 }
 
 function formatValue(raw: unknown, field: FieldMeta): string {
-  if (raw === undefined || raw === null) return c.gray(UNSET)
-  if (field.sensitive) return c.gray(MASK)
+  if (raw === undefined || raw === null) return colors.gray(UNSET)
+  if (field.sensitive) return colors.gray(MASK)
   return String(raw)
 }
 
@@ -46,7 +48,7 @@ export function formatConfig(config: unknown, name?: string): string {
   const label = name ?? meta.name ?? "config"
   const lines: string[] = []
 
-  lines.push(`${c.gray(BOX_TOP)} ${c.bolded(label)}`)
+  lines.push(`${colors.gray(BOX_TOP)} ${colors.bold(label)}`)
 
   // Group fields by their first path segment (section)
   const sections = new Map<string, FieldMeta[]>()
@@ -67,11 +69,11 @@ export function formatConfig(config: unknown, name?: string): string {
 
   let first = true
   for (const [section, fields] of sections) {
-    if (!first) lines.push(c.gray(BOX_MID))
+    if (!first) lines.push(colors.gray(BOX_MID))
     first = false
 
     if (section) {
-      lines.push(`${c.gray(BOX_MID)} ${c.cyan(section)}`)
+      lines.push(`${colors.gray(BOX_MID)} ${colors.cyan(section)}`)
     }
 
     for (const field of fields) {
@@ -82,11 +84,11 @@ export function formatConfig(config: unknown, name?: string): string {
       const formatted = formatValue(value, field)
       const padding = " ".repeat(maxLen - key.length + 2)
 
-      lines.push(`${c.gray(BOX_MID)} ${indent}${c.gray(key)}${padding}${formatted}`)
+      lines.push(`${colors.gray(BOX_MID)} ${indent}${colors.gray(key)}${padding}${formatted}`)
     }
   }
 
-  lines.push(c.gray(BOX_BOT))
+  lines.push(colors.gray(BOX_BOT))
   return lines.join("\n")
 }
 

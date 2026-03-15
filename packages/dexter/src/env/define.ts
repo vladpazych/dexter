@@ -1,9 +1,9 @@
 /**
  * App-owned configuration from environment variables.
  *
- * Each app declares its schema via defineConfig(), which reads process.env,
- * validates types, enforces required fields, and returns a typed object.
- * Metadata is attached via Symbol for printConfig() to read.
+ * Dexter keeps the schema layer separate from the public namespace API.
+ * `env.load(...)` and `env.inspect(...)` both use the helpers in this file.
+ * Metadata is attached via Symbol for env formatting to read.
  */
 
 import { loadEnv as loadEnvFiles } from "./loader.ts"
@@ -24,7 +24,7 @@ type FieldDef = {
   readonly sensitive?: boolean
 }
 
-export type Schema = { readonly [key: string]: FieldDef | Schema }
+export type EnvSchema = { readonly [key: string]: FieldDef | EnvSchema }
 
 // ============================================================================
 // TYPES — output inference
@@ -52,15 +52,15 @@ type IsPresent<F> = F extends { required: true }
 type FieldOutput<F> = IsPresent<F> extends true ? FieldValueType<F> : FieldValueType<F> | undefined
 
 /** Recursive output type for the entire schema. */
-export type ConfigOutput<S> = {
-  -readonly [K in keyof S]: S[K] extends { env: string } ? FieldOutput<S[K]> : ConfigOutput<S[K]>
+export type EnvConfig<S> = {
+  -readonly [K in keyof S]: S[K] extends { env: string } ? FieldOutput<S[K]> : EnvConfig<S[K]>
 }
 
 // ============================================================================
 // METADATA — hidden on config object for printConfig
 // ============================================================================
 
-export const CONFIG_META = Symbol.for("dexter.config.meta")
+export const ENV_META = Symbol.for("dexter.env.meta")
 
 export type FieldMeta = {
   path: string
@@ -72,12 +72,12 @@ export type FieldMeta = {
   hasDefault: boolean
 }
 
-export type ConfigMeta = {
+export type EnvMeta = {
   name?: string
   fields: FieldMeta[]
 }
 
-export type ConfigFieldReport = {
+export type EnvFieldReport = {
   path: string
   env: string
   source: string
@@ -85,26 +85,27 @@ export type ConfigFieldReport = {
   sensitive: boolean
 }
 
-export type ConfigLoadReport = {
+export type EnvLoadReport = {
   name: string
-  fields: ConfigFieldReport[]
+  fields: EnvFieldReport[]
 }
 
-export type ResolveConfigOptions = {
+export type EnvOptions = {
   env?: Record<string, string | undefined>
-  rootDir?: string
+  root?: string
+  name?: string
 }
 
 // ============================================================================
 // ERROR
 // ============================================================================
 
-export class ConfigError extends Error {
+export class EnvError extends Error {
   readonly issues: string[]
 
   constructor(issues: string[]) {
     super(`Invalid environment configuration\n${issues.map((i) => `  ${i}`).join("\n")}`)
-    this.name = "ConfigError"
+    this.name = "EnvError"
     this.issues = issues
   }
 }
@@ -142,7 +143,7 @@ function coerce(raw: string, type: EnvType, values?: readonly string[]): unknown
   }
 }
 
-function resolveNameAndSchema<const S extends Schema>(nameOrSchema: string | S, maybeSchema?: S): {
+function resolveNameAndSchema<const S extends EnvSchema>(nameOrSchema: string | S, maybeSchema?: S): {
   name?: string
   schema: S
 } {
@@ -181,7 +182,7 @@ function createFieldMeta(path: string, def: FieldDef): FieldMeta {
   }
 }
 
-function createFieldReport(path: string, field: FieldMeta, source: string, value: unknown): ConfigFieldReport {
+function createFieldReport(path: string, field: FieldMeta, source: string, value: unknown): EnvFieldReport {
   return {
     path,
     env: field.env,
@@ -192,23 +193,23 @@ function createFieldReport(path: string, field: FieldMeta, source: string, value
 }
 
 function attachConfigMeta(config: Record<string, unknown>, name: string | undefined, fields: FieldMeta[]): void {
-  Object.defineProperty(config, CONFIG_META, {
-    value: { name, fields } satisfies ConfigMeta,
+  Object.defineProperty(config, ENV_META, {
+    value: { name, fields } satisfies EnvMeta,
     enumerable: false,
     configurable: false,
     writable: false,
   })
 }
 
-function resolveConfigInternal<const S extends Schema>(
+function resolveConfigInternal<const S extends EnvSchema>(
   name: string | undefined,
   schema: S,
-  options: ResolveConfigOptions,
-): { config: ConfigOutput<S>; report: ConfigLoadReport } {
+  options: EnvOptions,
+): { config: EnvConfig<S>; report: EnvLoadReport } {
   const errors: string[] = []
   const fields: FieldMeta[] = []
-  const reportFields: ConfigFieldReport[] = []
-  const fileEnv = options.rootDir ? loadEnvFiles(options.rootDir) : { env: {}, sources: {} }
+  const reportFields: EnvFieldReport[] = []
+  const fileEnv = options.root ? loadEnvFiles(options.root) : { env: {}, sources: {} }
   const runtimeEnv = options.env ?? process.env
 
   function lookupValue(envName: string): { raw: string | undefined; source: string | undefined } {
@@ -273,10 +274,10 @@ function resolveConfigInternal<const S extends Schema>(
     return result
   }
 
-  const config = walk(schema as Record<string, unknown>, []) as ConfigOutput<S> & Record<string, unknown>
+  const config = walk(schema as Record<string, unknown>, []) as EnvConfig<S> & Record<string, unknown>
 
   if (errors.length > 0) {
-    throw new ConfigError(errors)
+    throw new EnvError(errors)
   }
 
   attachConfigMeta(config, name, fields)
@@ -290,30 +291,16 @@ function resolveConfigInternal<const S extends Schema>(
   }
 }
 
-export function defineConfig<const S extends Schema>(schema: S): ConfigOutput<S>
-export function defineConfig<const S extends Schema>(name: string, schema: S): ConfigOutput<S>
-export function defineConfig<const S extends Schema>(nameOrSchema: string | S, maybeSchema?: S): ConfigOutput<S> {
-  const resolved = resolveNameAndSchema(nameOrSchema, maybeSchema)
-  return resolveConfigInternal(resolved.name, resolved.schema, { env: process.env }).config
+export function loadEnvConfig<const S extends EnvSchema>(schema: S, options: EnvOptions = {}): EnvConfig<S> {
+  return resolveConfigInternal(options.name, schema, options).config
 }
 
-export function resolveConfig<const S extends Schema>(schema: S, options?: ResolveConfigOptions): {
-  config: ConfigOutput<S>
-  report: ConfigLoadReport
-}
-export function resolveConfig<const S extends Schema>(name: string, schema: S, options?: ResolveConfigOptions): {
-  config: ConfigOutput<S>
-  report: ConfigLoadReport
-}
-export function resolveConfig<const S extends Schema>(
-  nameOrSchema: string | S,
-  schemaOrOptions?: S | ResolveConfigOptions,
-  maybeOptions?: ResolveConfigOptions,
-): { config: ConfigOutput<S>; report: ConfigLoadReport } {
-  if (typeof nameOrSchema === "string") {
-    const resolved = resolveNameAndSchema(nameOrSchema, schemaOrOptions as S | undefined)
-    return resolveConfigInternal(resolved.name, resolved.schema, maybeOptions ?? {})
-  }
-
-  return resolveConfigInternal(undefined, nameOrSchema, (schemaOrOptions ?? {}) as ResolveConfigOptions)
+export function inspectEnvConfig<const S extends EnvSchema>(
+  schema: S,
+  options: EnvOptions = {},
+): {
+  config: EnvConfig<S>
+  report: EnvLoadReport
+} {
+  return resolveConfigInternal(options.name, schema, options)
 }
