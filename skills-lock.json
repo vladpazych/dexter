@@ -1,9 +1,14 @@
 {
   "version": 1,
   "skills": {
+    "agents-md": {
+      "source": "vladpazych/awesome-skills",
+      "sourceType": "github",
+      "computedHash": "8ca90ebd2a7760de950281882ff8c6986fb41c0830611fc0139d11bd54335c28"
+    },
     "readme-md": {
-      "source": "git@github.com:vladpazych/awesome-skills.git",
-      "sourceType": "git",
+      "source": "vladpazych/awesome-skills",
+      "sourceType": "github",
       "computedHash": "67e69e420166456862e82fd3ec284b5c7829c143231fb67119070692b6290c83"
     }
   }
