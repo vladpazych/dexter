@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run pack:check
+
+  changeset:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install
+      - name: Require changeset for package changes
+        run: |
+          base_ref="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --depth=1
+
+          changed_files=$(git diff --name-only "$base_ref"...HEAD)
+
+          if [ -z "$changed_files" ]; then
+            exit 0
+          fi
+
+          if ! printf '%s\n' "$changed_files" | grep -q '^packages/'; then
+            exit 0
+          fi
+
+          release_files=$(
+            printf '%s\n' "$changed_files" | grep '^packages/' | grep -Ev '(^packages/[^/]+/(README\.md|CHANGELOG\.md)$|^packages/[^/]+/test/)' || true
+          )
+
+          if [ -z "$release_files" ]; then
+            exit 0
+          fi
+
+          if printf '%s\n' "$changed_files" | grep -q '^\.changeset/'; then
+            exit 0
+          fi
+
+          echo "::error::Package changes require a changeset. Run 'npm run changeset:add' unless this PR only updates package docs, changelogs, or tests."
+          exit 1

@@ -1,0 +1,49 @@
+{
+  "name": "@vladpazych/rig",
+  "version": "1.0.0",
+  "description": "Small primitives for repo CLI tooling",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vladpazych/rig.git",
+    "directory": "packages/rig"
+  },
+  "homepage": "https://github.com/vladpazych/rig#readme",
+  "bugs": {
+    "url": "https://github.com/vladpazych/rig/issues"
+  },
+  "keywords": [
+    "node",
+    "repo",
+    "tooling",
+    "workflow",
+    "typescript"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "minimatch": "^10.2.4"
+  }
+}

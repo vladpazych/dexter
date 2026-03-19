@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noFallthroughCasesInSwitch": true,
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@vladpazych/rig": ["packages/rig/src/index.ts"],
+      "@vladpazych/rig-logger-sinks": ["packages/rig-logger-sinks/src/index.ts"]
+    }
+  },
+  "include": ["packages/**/*.ts"]
+}
